@@ -44,8 +44,8 @@ if "messages" not in st.session_state:
     st.session_state.messages = load_messages()
 if "wallpaper" not in st.session_state:
     st.session_state.wallpaper = "beach"
-if "refresh_counter" not in st.session_state:
-    st.session_state.refresh_counter = 0
+if "last_refresh" not in st.session_state:
+    st.session_state.last_refresh = time.time()
 
 # Wallpaper options
 wallpapers = {
@@ -58,14 +58,6 @@ wallpapers = {
     "city": "https://images.unsplash.com/photo-1444723121867-7a241cacace9?w=1600",
     "stars": "https://images.unsplash.com/photo-1419242902214-272b3f66ee7a?w=1600"
 }
-
-# Auto-refresh mechanism
-def auto_refresh():
-    """Trigger a rerun to show new messages"""
-    if st.session_state.refresh_counter < 100:
-        st.session_state.refresh_counter += 1
-    time.sleep(0.1)
-    st.rerun()
 
 # Custom CSS with dynamic wallpaper
 st.markdown(f"""
@@ -107,6 +99,12 @@ st.markdown(f"""
         border-radius: 15px;
         padding: 10px;
         margin: 10px 0;
+        animation: fadeIn 0.3s ease-in;
+    }}
+    
+    @keyframes fadeIn {{
+        from {{ opacity: 0; transform: translateY(10px); }}
+        to {{ opacity: 1; transform: translateY(0); }}
     }}
     
     [data-testid="stSidebar"] {{
@@ -127,12 +125,19 @@ st.markdown(f"""
         position: fixed;
         bottom: 10px;
         right: 10px;
-        background: rgba(0,0,0,0.5);
-        color: white;
-        padding: 2px 8px;
-        border-radius: 10px;
-        font-size: 10px;
+        background: rgba(0,0,0,0.7);
+        color: #10b981;
+        padding: 4px 12px;
+        border-radius: 20px;
+        font-size: 11px;
+        font-weight: bold;
         z-index: 999;
+        animation: pulse 1s infinite;
+    }}
+    
+    @keyframes pulse {{
+        0%, 100% {{ opacity: 0.6; }}
+        50% {{ opacity: 1; }}
     }}
 </style>
 """, unsafe_allow_html=True)
@@ -312,23 +317,12 @@ else:
         }
         st.session_state.messages.append(new_msg)
         save_messages(st.session_state.messages)
-        st.rerun()  # Immediate refresh
-    
-    # Auto-refresh every 3 seconds to show new messages
-    if st.button("🔄 Refresh Chat", use_container_width=True):
-        st.session_state.messages = load_messages()
         st.rerun()
     
-    # Auto-refresh timer
-    refresh_placeholder = st.empty()
-    with refresh_placeholder.container():
-        if st.checkbox("Auto-refresh (3 seconds)", value=True):
-            time.sleep(3)
-            st.session_state.messages = load_messages()
-            st.rerun()
-        else:
-            st.caption("📌 Turn on auto-refresh to see new messages instantly")
+    # SUPER FAST AUTO-REFRESH (0.0005 seconds = 2000 times per second)
+    # Refresh indicator
+    st.markdown('<div class="refresh-indicator">⚡ LIVE • Auto-refreshing</div>', unsafe_allow_html=True)
     
-    # Footer
-    st.markdown("---")
-    st.caption("✨ Be kind • Stay curious • Connect with others ✨")
+    # Ultra-fast auto-refresh
+    time.sleep(0.0005)  # 0.5 milliseconds refresh
+    st.rerun()
