@@ -5,9 +5,6 @@ import hashlib
 import json
 import os
 import time
-from PIL import Image
-import io
-import base64
 import random
 
 st.set_page_config(page_title="ChatVerse", page_icon="💬", layout="wide")
@@ -48,10 +45,6 @@ if "messages" not in st.session_state:
     st.session_state.messages = load_messages()
 if "wallpaper" not in st.session_state:
     st.session_state.wallpaper = "dark"
-if "typing_users" not in st.session_state:
-    st.session_state.typing_users = set()
-if "last_typing_time" not in st.session_state:
-    st.session_state.last_typing_time = {}
 
 # Wallpaper options
 wallpapers = {
@@ -63,7 +56,7 @@ wallpapers = {
     "ocean": "https://images.unsplash.com/photo-1505118380757-91f5f5632de0?w=1600"
 }
 
-# Custom CSS with glass morphism and typing bubble
+# Custom CSS
 def get_css():
     if st.session_state.wallpaper == "dark":
         bg = wallpapers["dark"]
@@ -72,30 +65,19 @@ def get_css():
     
     return f"""
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
-        
-        * {{
-            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-        }}
-        
         .stApp {{
             background: {bg};
             background-size: cover;
             background-position: center;
             background-attachment: fixed;
-            transition: all 0.5s ease;
         }}
         
-        /* Glass card effect */
-        .glass-card {{
-            background: rgba(255, 255, 255, 0.08);
-            backdrop-filter: blur(18px);
-            -webkit-backdrop-filter: blur(18px);
-            border-radius: 2rem;
-            border: 1px solid rgba(255, 255, 255, 0.15);
-            box-shadow: 0 25px 50px rgba(0,0,0,0.3);
-            padding: 1rem;
-            margin-bottom: 1rem;
+        /* Glass card effect for all text containers */
+        .stChatMessage, .stAlert, .stInfo, .stSuccess, .stWarning, .stError {{
+            background: rgba(255, 255, 255, 0.08) !important;
+            backdrop-filter: blur(18px) !important;
+            border: 1px solid rgba(255, 255, 255, 0.15) !important;
+            border-radius: 1rem !important;
         }}
         
         /* Message bubbles */
@@ -120,8 +102,8 @@ def get_css():
             }}
         }}
         
-        /* Typing indicator bubble */
-        .typing-indicator {{
+        /* Typing indicator */
+        .typing-bubble {{
             background: rgba(255, 255, 255, 0.08);
             backdrop-filter: blur(10px);
             border: 1px solid rgba(255, 255, 255, 0.1);
@@ -134,48 +116,36 @@ def get_css():
             animation: fadeInUp 0.3s ease-out;
         }}
         
-        .typing-dot {{
+        .dot {{
             width: 8px;
             height: 8px;
             background: #c084fc;
             border-radius: 50%;
             display: inline-block;
-            animation: typingAnimation 1.4s infinite ease-in-out;
+            animation: bounce 1.4s infinite ease-in-out;
         }}
         
-        .typing-dot:nth-child(1) {{
-            animation-delay: -0.32s;
+        .dot:nth-child(1) {{ animation-delay: -0.32s; }}
+        .dot:nth-child(2) {{ animation-delay: -0.16s; }}
+        
+        @keyframes bounce {{
+            0%, 60%, 100% {{ transform: translateY(0); opacity: 0.4; }}
+            30% {{ transform: translateY(-10px); opacity: 1; }}
         }}
         
-        .typing-dot:nth-child(2) {{
-            animation-delay: -0.16s;
-        }}
-        
-        @keyframes typingAnimation {{
-            0%, 60%, 100% {{
-                transform: translateY(0);
-                opacity: 0.4;
-            }}
-            30% {{
-                transform: translateY(-10px);
-                opacity: 1;
-            }}
-        }}
-        
-        /* Sidebar glass effect */
+        /* Sidebar glass */
         [data-testid="stSidebar"] {{
             background: rgba(15, 23, 42, 0.8) !important;
             backdrop-filter: blur(18px) !important;
             border-right: 1px solid rgba(255, 255, 255, 0.1) !important;
         }}
         
-        /* Input fields glass effect */
-        .stTextInput > div > div > input {{
+        /* Input fields */
+        .stTextInput > div > div > input, .stChatInput > div > div > textarea {{
             background: rgba(255, 255, 255, 0.07) !important;
             border: 1px solid rgba(255, 255, 255, 0.2) !important;
             border-radius: 2rem !important;
             color: white !important;
-            padding: 0.7rem 1.4rem !important;
         }}
         
         .stTextInput > div > div > input:focus {{
@@ -191,25 +161,22 @@ def get_css():
             color: white !important;
             font-weight: 600 !important;
             transition: all 0.2s ease !important;
-            box-shadow: 0 8px 18px rgba(124, 58, 237, 0.3) !important;
         }}
         
         .stButton > button:hover {{
             transform: scale(1.02) !important;
-            box-shadow: 0 10px 22px rgba(139, 92, 246, 0.5) !important;
+            box-shadow: 0 5px 15px rgba(124, 58, 237, 0.4) !important;
         }}
         
         /* Headers */
-        h1, h2, h3 {{
+        h1, h2, h3, .stMarkdown {{
+            color: #e2e8f0 !important;
+        }}
+        
+        h1 {{
             background: linear-gradient(135deg, #c084fc, #a78bfa) !important;
             -webkit-background-clip: text !important;
             -webkit-text-fill-color: transparent !important;
-            font-weight: 600 !important;
-        }}
-        
-        /* Text colors */
-        .stMarkdown, .stCaption {{
-            color: #e2e8f0 !important;
         }}
         
         /* Online badge */
@@ -233,24 +200,14 @@ def get_css():
         }}
         
         @keyframes pulse {{
-            0%, 100% {{ opacity: 1; transform: scale(1); }}
-            50% {{ opacity: 0.5; transform: scale(0.8); }}
+            0%, 100% {{ opacity: 1; }}
+            50% {{ opacity: 0.5; }}
         }}
         
         /* Scrollbar */
-        ::-webkit-scrollbar {{
-            width: 6px;
-        }}
-        
-        ::-webkit-scrollbar-track {{
-            background: rgba(0,0,0,0.2);
-            border-radius: 10px;
-        }}
-        
-        ::-webkit-scrollbar-thumb {{
-            background: #7c3aed;
-            border-radius: 10px;
-        }}
+        ::-webkit-scrollbar {{ width: 6px; }}
+        ::-webkit-scrollbar-track {{ background: rgba(0,0,0,0.2); border-radius: 10px; }}
+        ::-webkit-scrollbar-thumb {{ background: #7c3aed; border-radius: 10px; }}
         
         /* Refresh indicator */
         .refresh-indicator {{
@@ -265,15 +222,6 @@ def get_css():
             font-size: 11px;
             font-weight: bold;
             z-index: 999;
-            animation: pulse 1s infinite;
-        }}
-        
-        /* Chat input area */
-        .stChatInput > div > div > textarea {{
-            background: rgba(255, 255, 255, 0.07) !important;
-            border: 1px solid rgba(255, 255, 255, 0.2) !important;
-            border-radius: 2rem !important;
-            color: white !important;
         }}
     </style>
     """
@@ -294,7 +242,7 @@ if not st.session_state.logged_in:
             
             if submitted:
                 users = load_users()
-                if username in users and users[username].get("password") == hash_password(password):
+                if username in users and users[username] == hash_password(password):
                     st.session_state.logged_in = True
                     st.session_state.username = username
                     st.rerun()
@@ -318,19 +266,14 @@ if not st.session_state.logged_in:
                     if new_user in users:
                         st.error("Username already exists")
                     else:
-                        users[new_user] = {
-                            "password": hash_password(new_pass),
-                            "profile_pic": None,
-                            "bio": "",
-                            "joined": datetime.datetime.now().isoformat()
-                        }
+                        users[new_user] = hash_password(new_pass)
                         save_users(users)
                         st.success("Account created! Please sign in.")
 
 else:
     st.markdown(get_css(), unsafe_allow_html=True)
     
-    # Header with online badge
+    # Header
     col1, col2, col3 = st.columns([2, 1, 1])
     with col1:
         st.title("💬 ChatVerse")
@@ -370,61 +313,11 @@ else:
         
         # Profile section
         st.markdown("## 👤 My Profile")
-        
-        users_data = load_users()
-        current_user_data = users_data.get(st.session_state.username, {})
-        
-        # Display current profile pic safely
-        col1, col2 = st.columns([1, 2])
-        with col1:
-            profile_pic = current_user_data.get("profile_pic") if current_user_data else None
-            if profile_pic and profile_pic != "None":
-                try:
-                    st.image(profile_pic, width=60, caption="")
-                except:
-                    st.markdown(f"### 🧑")
-            else:
-                st.markdown(f"### 🧑")
-        
-        with col2:
-            st.markdown(f"**@{st.session_state.username}**")
-            bio = current_user_data.get("bio") if current_user_data else ""
-            if bio:
-                st.caption(bio[:50])
+        st.markdown(f"**@{st.session_state.username}**")
         
         # Edit profile
         with st.expander("✏️ Edit Profile", expanded=False):
-            # Profile picture upload
-            uploaded_file = st.file_uploader("Profile Picture", type=['jpg', 'png', 'jpeg'])
-            if uploaded_file:
-                img = Image.open(uploaded_file)
-                img = img.resize((150, 150))
-                buffered = io.BytesIO()
-                img.save(buffered, format="PNG")
-                img_str = base64.b64encode(buffered.getvalue()).decode()
-                profile_pic_data = f"data:image/png;base64,{img_str}"
-                
-                users_data = load_users()
-                if st.session_state.username in users_data:
-                    users_data[st.session_state.username]["profile_pic"] = profile_pic_data
-                    save_users(users_data)
-                    st.success("Profile picture updated!")
-                    st.rerun()
-            
-            # Bio
-            current_bio = current_user_data.get("bio") if current_user_data else ""
-            new_bio = st.text_area("Bio", value=current_bio, 
-                                   placeholder="Tell us about yourself...", max_chars=100)
-            if st.button("Save Bio"):
-                users_data = load_users()
-                if st.session_state.username in users_data:
-                    users_data[st.session_state.username]["bio"] = new_bio
-                    save_users(users_data)
-                    st.success("Bio updated!")
-                    st.rerun()
-            
             # Change username
-            st.markdown("---")
             new_username = st.text_input("Change Username", value=st.session_state.username)
             if new_username != st.session_state.username:
                 if st.button("Update Username"):
@@ -433,10 +326,32 @@ else:
                         users[new_username] = users.pop(st.session_state.username)
                         save_users(users)
                         st.session_state.username = new_username
-                        st.success("Username updated!")
+                        st.success("Username updated! Please sign in again.")
+                        st.session_state.logged_in = False
                         st.rerun()
                     else:
                         st.error("Username already taken")
+            
+            # Change password
+            st.markdown("---")
+            st.markdown("#### Change Password")
+            old_pass = st.text_input("Current Password", type="password", key="old")
+            new_pass = st.text_input("New Password", type="password", key="new")
+            confirm_pass = st.text_input("Confirm New Password", type="password", key="confirm")
+            
+            if st.button("Update Password"):
+                users = load_users()
+                if st.session_state.username in users and users[st.session_state.username] == hash_password(old_pass):
+                    if new_pass == confirm_pass:
+                        users[st.session_state.username] = hash_password(new_pass)
+                        save_users(users)
+                        st.success("Password updated! Please sign in again.")
+                        st.session_state.logged_in = False
+                        st.rerun()
+                    else:
+                        st.error("New passwords don't match")
+                else:
+                    st.error("Current password is incorrect")
         
         st.markdown("---")
         
@@ -444,12 +359,9 @@ else:
         st.markdown("## 📊 Stats")
         st.metric("Total Messages", len(st.session_state.messages))
         
-        try:
-            if st.session_state.messages:
-                unique_users = len(set(msg.get("username", "") for msg in st.session_state.messages if msg.get("username")))
-                st.metric("Community Members", unique_users)
-        except:
-            pass
+        if st.session_state.messages:
+            unique_users = len(set(msg.get("username", "") for msg in st.session_state.messages))
+            st.metric("Community Members", unique_users)
         
         st.markdown("---")
         
@@ -463,38 +375,34 @@ else:
                 st.rerun()
         
         st.markdown("---")
-        st.info("✨ Welcome to ChatVerse! A friendly community forum with glass morphism design and live typing indicators!")
+        st.info("✨ Glass morphism design • Live chat • Community forum")
     
     # Main chat area
     st.markdown("### 💬 Live Chat")
     
-    # Simulate typing indicator
-    if random.random() < 0.1 and len(st.session_state.messages) > 0:
+    # Random typing indicator (for fun)
+    if random.random() < 0.15 and len(st.session_state.messages) > 3:
         other_users = list(set(msg.get("username", "") for msg in st.session_state.messages if msg.get("username") != st.session_state.username))
         if other_users:
             typing_user = random.choice(other_users)
             st.markdown(f"""
-            <div class="typing-indicator">
-                <span>💬 {typing_user}</span>
-                <span class="typing-dot"></span>
-                <span class="typing-dot"></span>
-                <span class="typing-dot"></span>
-                <span style="font-size: 0.8rem; margin-left: 0.3rem;">typing...</span>
+            <div class="typing-bubble">
+                <span>✍️ {typing_user}</span>
+                <span class="dot"></span>
+                <span class="dot"></span>
+                <span class="dot"></span>
+                <span style="font-size: 0.75rem; margin-left: 0.3rem;">typing...</span>
             </div>
             """, unsafe_allow_html=True)
     
     # Reload messages
     st.session_state.messages = load_messages()
     
-    # Display messages with glass cards
+    # Display messages
     if not st.session_state.messages:
         st.info("✨ No messages yet. Start the conversation!")
     else:
         for msg in st.session_state.messages:
-            # Get profile pic if exists safely
-            users_data = load_users()
-            user_info = users_data.get(msg.get("username", ""), {})
-            
             if msg.get("username") == st.session_state.username:
                 with st.chat_message("user"):
                     st.markdown(f"**{msg.get('username', 'Unknown')}**  `{msg.get('time', '')}`")
@@ -502,12 +410,9 @@ else:
             else:
                 with st.chat_message("assistant"):
                     st.markdown(f"**{msg.get('username', 'Unknown')}**  `{msg.get('time', '')}`")
-                    bio = user_info.get("bio") if user_info else ""
-                    if bio:
-                        st.caption(f"📝 {bio[:50]}")
                     st.write(msg.get('text', ''))
     
-    # Message input with typing detection
+    # Message input
     prompt = st.chat_input("Type your message here...")
     
     if prompt:
@@ -515,16 +420,15 @@ else:
             "id": str(uuid.uuid4()),
             "username": st.session_state.username,
             "text": prompt,
-            "time": datetime.datetime.now().strftime("%I:%M %p"),
-            "timestamp": datetime.datetime.now().isoformat()
+            "time": datetime.datetime.now().strftime("%I:%M %p")
         }
         st.session_state.messages.append(new_msg)
         save_messages(st.session_state.messages)
         st.rerun()
     
-    # Auto-refresh indicator
-    st.markdown('<div class="refresh-indicator">⚡ LIVE • Auto-refreshing</div>', unsafe_allow_html=True)
+    # Live indicator
+    st.markdown('<div class="refresh-indicator">⚡ LIVE</div>', unsafe_allow_html=True)
     
-    # Auto-refresh every 0.5 seconds
-    time.sleep(0.5)
+    # Auto-refresh every 1 second
+    time.sleep(1)
     st.rerun()
