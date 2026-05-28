@@ -41,14 +41,23 @@ def save_messages(messages):
     with open(MESSAGES_FILE, 'w') as f:
         json.dump(messages, f, indent=4)
 
+# Helper function to prevent legacy data crashes (Fixes line 273 and 355)
+def get_user_data(users, username):
+    data = users.get(username)
+    if not data:
+        return {"password": "", "profile_pic": ""}
+    if isinstance(data, str):
+        # Gracefully handle legacy accounts saved as pure strings
+        return {"password": data, "profile_pic": ""}
+    return data
+
 # Session state initialization
 if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
 if "username" not in st.session_state:
     st.session_state.username = ""
-# CHANGED: Default wallpaper is now set to "stars"
 if "wallpaper" not in st.session_state:
-    st.session_state.wallpaper = "stars"
+    st.session_state.wallpaper = "stars"  # Default wallpaper set to Stars
 
 # Wallpaper options
 wallpapers = {
@@ -140,22 +149,27 @@ def clear_messages_dialog():
         time.sleep(1)
         st.rerun()
 
-# Isolated Fragment for high-performance background polling (runs every 3 seconds)
+# Background polling fragment (runs every 3 seconds)
 @st.fragment(run_every=3)
 def live_chat_feed():
     st.markdown("### 💬 Live Chat")
     messages = load_messages()
+    users = load_users()
     
     if not messages:
         st.info("✨ No messages yet. Start the conversation!")
     else:
         for msg in messages:
+            # Handle dynamic avatars based on profile pictures
+            sender_data = get_user_data(users, msg["username"])
+            avatar_url = sender_data.get("profile_pic") if sender_data.get("profile_pic") else None
+            
             if msg["username"] == st.session_state.username:
-                with st.chat_message("user", avatar="🧑"):
+                with st.chat_message("user", avatar=avatar_url if avatar_url else "🧑"):
                     st.markdown(f"**{msg['username']}** `{msg['time']}`")
                     st.write(msg["text"])
             else:
-                with st.chat_message("assistant", avatar="💬"):
+                with st.chat_message("assistant", avatar=avatar_url if avatar_url else "💬"):
                     st.markdown(f"**{msg['username']}** `{msg['time']}`")
                     st.write(msg["text"])
     
@@ -176,8 +190,9 @@ if not st.session_state.logged_in:
             
             if submitted:
                 users = load_users()
-                # FIXED: Standardized dictionary lookups to verify matching flat JSON layout securely
-                if username in users and users[username] == hash_password(password):
+                account_info = get_user_data(users, username)
+                
+                if username in users and account_info["password"] == hash_password(password):
                     st.session_state.logged_in = True
                     st.session_state.username = username
                     st.rerun()
@@ -201,12 +216,16 @@ if not st.session_state.logged_in:
                     if new_user in users:
                         st.error("Username already exists")
                     else:
-                        users[new_user] = hash_password(new_pass)
+                        # Structural Save: Dictionary template layout supporting profile pics
+                        users[new_user] = {
+                            "password": hash_password(new_pass),
+                            "profile_pic": ""
+                        }
                         save_users(users)
                         st.success("Account created! Please sign in.")
 
 else:
-    # Main Dashboard Header
+    # Dashboard Header
     col1, col2, col3 = st.columns([2, 1, 1])
     with col1:
         st.title("💬 ChatVerse")
@@ -220,7 +239,7 @@ else:
     
     st.markdown("---")
     
-    # Sidebar Setup
+    # Sidebar
     with st.sidebar:
         st.markdown("## 🎨 Customize")
         
@@ -239,8 +258,33 @@ else:
         st.markdown("---")
         st.markdown("## 👤 My Profile")
         
-        # Edit profile section
+        users = load_users()
+        current_user_data = get_user_data(users, st.session_state.username)
+        
+        # Expandable Profile Editor (Fixes Line 352-358 layout)
         with st.expander("✏️ Edit Profile", expanded=False):
+            # Display Avatar
+            col_pic, col_info = st.columns([1, 2])
+            with col_pic:
+                if current_user_data.get("profile_pic"):
+                    st.image(current_user_data["profile_pic"], width=60)
+                else:
+                    st.markdown(f"### 🧑\n**{st.session_state.username[0].upper()}**")
+            
+            # Profile Picture Update Field
+            new_pic_url = st.text_input("Profile Pic URL", value=current_user_data.get("profile_pic", ""))
+            if st.button("Save Profile Picture") and new_pic_url != current_user_data.get("profile_pic"):
+                users = load_users()
+                if isinstance(users[st.session_state.username], str):
+                    users[st.session_state.username] = {"password": users[st.session_state.username], "profile_pic": ""}
+                users[st.session_state.username]["profile_pic"] = new_pic_url
+                save_users(users)
+                st.success("Avatar updated!")
+                st.rerun()
+                
+            st.markdown("---")
+            
+            # Change Username
             new_username = st.text_input("Change Username", value=st.session_state.username)
             if new_username != st.session_state.username:
                 if st.button("Update Username"):
@@ -249,7 +293,7 @@ else:
                         users[new_username] = users.pop(st.session_state.username)
                         save_users(users)
                         st.session_state.username = new_username
-                        st.success("Username updated! Sign in again.")
+                        st.success("Username updated! Please sign in again.")
                         st.session_state.logged_in = False
                         st.rerun()
                     else:
@@ -263,11 +307,14 @@ else:
             
             if st.button("Update Password"):
                 users = load_users()
-                if users[st.session_state.username] == hash_password(old_pass):
+                account_info = get_user_data(users, st.session_state.username)
+                if account_info["password"] == hash_password(old_pass):
                     if new_pass == confirm_pass:
-                        users[st.session_state.username] = hash_password(new_pass)
+                        if isinstance(users[st.session_state.username], str):
+                            users[st.session_state.username] = {"password": "", "profile_pic": ""}
+                        users[st.session_state.username]["password"] = hash_password(new_pass)
                         save_users(users)
-                        st.success("Password updated! Sign in again.")
+                        st.success("Password updated! Please sign in again.")
                         st.session_state.logged_in = False
                         st.rerun()
                     else:
@@ -285,15 +332,13 @@ else:
             st.metric("Community Members", unique_users)
         
         st.markdown("---")
-        
-        # Trigger safe Dialog confirmation
         if st.button("🗑️ Clear All Messages", use_container_width=True):
             clear_messages_dialog()
             
         st.markdown("---")
         st.info("✨ Welcome to ChatVerse! A bright, friendly community forum.")
     
-    # Render the optimized live stream feed fragment
+    # Render feed
     live_chat_feed()
     
     # Message input handling
