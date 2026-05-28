@@ -1,18 +1,18 @@
 import streamlit as st
 import datetime
-import uuid
 import hashlib
 import json
 import os
 
 st.set_page_config(page_title="ChatVerse", page_icon="💬", layout="wide")
 
-# File storage
+# File paths
 USERS_FILE = "users.json"
 MESSAGES_FILE = "messages.json"
 
-def hash_password(password):
-    return hashlib.sha256(password.encode()).hexdigest()
+# Helper functions
+def hash_password(pwd):
+    return hashlib.sha256(pwd.encode()).hexdigest()
 
 def load_users():
     if os.path.exists(USERS_FILE):
@@ -24,143 +24,143 @@ def save_users(users):
     with open(USERS_FILE, 'w') as f:
         json.dump(users, f)
 
-def load_messages():
+def load_msgs():
     if os.path.exists(MESSAGES_FILE):
         with open(MESSAGES_FILE, 'r') as f:
             return json.load(f)
     return []
 
-def save_messages(messages):
+def save_msgs(msgs):
     with open(MESSAGES_FILE, 'w') as f:
-        json.dump(messages, f)
+        json.dump(msgs, f)
 
 # Session state
-if "logged_in" not in st.session_state:
+if 'logged_in' not in st.session_state:
     st.session_state.logged_in = False
-if "username" not in st.session_state:
-    st.session_state.username = ""
-if "messages" not in st.session_state:
-    st.session_state.messages = load_messages()
+if 'user' not in st.session_state:
+    st.session_state.user = ""
+if 'msgs' not in st.session_state:
+    st.session_state.msgs = load_msgs()
 
-# Custom CSS
+# CSS
 st.markdown("""
 <style>
-    .stApp {
-        background: linear-gradient(145deg, #0f172a 0%, #1e293b 100%);
-    }
-    .stButton > button {
-        background: linear-gradient(135deg, #7c3aed, #a855f7);
-        color: white;
-        border: none;
-    }
-    .stButton > button:hover {
-        transform: scale(1.02);
-    }
+.stApp {
+    background: linear-gradient(145deg, #0f172a 0%, #1e293b 100%);
+}
+[data-testid="stChatMessage"] {
+    background: rgba(255, 255, 255, 0.08) !important;
+    backdrop-filter: blur(18px) !important;
+    border: 1px solid rgba(255, 255, 255, 0.15) !important;
+    border-radius: 1rem !important;
+}
+[data-testid="stSidebar"] {
+    background: rgba(15, 23, 42, 0.8) !important;
+    backdrop-filter: blur(18px) !important;
+}
+h1 {
+    background: linear-gradient(135deg, #c084fc, #a78bfa);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
 </style>
 """, unsafe_allow_html=True)
 
-# Authentication
+# Login/Signup
 if not st.session_state.logged_in:
     st.title("💬 ChatVerse")
-    st.markdown("### Welcome to the Community Forum")
     
-    tab1, tab2 = st.tabs(["🔐 Sign In", "📝 Sign Up"])
+    choice = st.radio("", ["Sign In", "Sign Up"], horizontal=True)
     
-    with tab1:
+    if choice == "Sign In":
         with st.form("login"):
-            username = st.text_input("Username")
-            password = st.text_input("Password", type="password")
-            submitted = st.form_submit_button("Sign In")
-            
-            if submitted:
+            user = st.text_input("Username")
+            pwd = st.text_input("Password", type="password")
+            btn = st.form_submit_button("Sign In")
+            if btn:
                 users = load_users()
-                if username in users and users[username] == hash_password(password):
+                if user in users and users[user] == hash_password(pwd):
                     st.session_state.logged_in = True
-                    st.session_state.username = username
+                    st.session_state.user = user
                     st.rerun()
                 else:
-                    st.error("Invalid username or password")
+                    st.error("Wrong username or password")
     
-    with tab2:
+    else:
         with st.form("signup"):
-            new_user = st.text_input("Choose Username")
-            new_pass = st.text_input("Choose Password", type="password")
-            confirm = st.text_input("Confirm Password", type="password")
-            submitted = st.form_submit_button("Sign Up")
-            
-            if submitted:
-                if not new_user or not new_pass:
+            user = st.text_input("Username")
+            pwd = st.text_input("Password", type="password")
+            confirm = st.text_input("Confirm", type="password")
+            btn = st.form_submit_button("Sign Up")
+            if btn:
+                if not user or not pwd:
                     st.error("Fill all fields")
-                elif new_pass != confirm:
+                elif pwd != confirm:
                     st.error("Passwords don't match")
                 else:
                     users = load_users()
-                    if new_user in users:
-                        st.error("Username already exists")
+                    if user in users:
+                        st.error("Username taken")
                     else:
-                        users[new_user] = hash_password(new_pass)
+                        users[user] = hash_password(pwd)
                         save_users(users)
-                        st.success("Account created! Please sign in.")
+                        st.success("Account created! Sign in now.")
+
+# Main chat
 else:
-    # Main chat
+    # Header
     col1, col2, col3 = st.columns([2, 1, 1])
     with col1:
         st.title("💬 ChatVerse")
     with col2:
-        st.markdown(f"**👤 {st.session_state.username}**")
+        count = len(set(m['user'] for m in st.session_state.msgs)) + 1
+        st.markdown(f"🟢 {count} online")
     with col3:
-        if st.button("🚪 Sign Out"):
+        if st.button("Sign Out"):
             st.session_state.logged_in = False
-            st.session_state.username = ""
+            st.session_state.user = ""
             st.rerun()
-    
-    st.markdown("---")
     
     # Sidebar
     with st.sidebar:
-        st.markdown("### 📊 Chat Stats")
-        st.metric("Total Messages", len(st.session_state.messages))
-        unique_users = len(set(m["username"] for m in st.session_state.messages))
-        st.metric("Community Members", unique_users)
-        
-        st.markdown("---")
-        if st.button("🗑️ Clear All Messages"):
-            st.session_state.messages = []
-            save_messages(st.session_state.messages)
-            st.success("Chat cleared!")
+        st.write(f"### 👤 {st.session_state.user}")
+        st.write("---")
+        st.metric("Messages", len(st.session_state.msgs))
+        if st.button("Clear Chat"):
+            st.session_state.msgs = []
+            save_msgs(st.session_state.msgs)
             st.rerun()
-        
-        st.markdown("---")
-        st.markdown("### 🎨 About")
-        st.info("Welcome to ChatVerse! A friendly community forum where everyone can connect and share ideas. Be respectful and have fun!")
+        st.write("---")
+        st.info("✨ Glass morphism chat")
     
-    # Display messages
-    if not st.session_state.messages:
-        st.info("✨ No messages yet. Start the conversation!")
+    # Chat area
+    st.write("### 💬 Live Chat")
+    
+    # Load latest messages
+    st.session_state.msgs = load_msgs()
+    
+    # Show messages
+    if not st.session_state.msgs:
+        st.info("No messages yet")
     else:
-        for msg in st.session_state.messages:
-            if msg["username"] == st.session_state.username:
+        for m in st.session_state.msgs:
+            if m['user'] == st.session_state.user:
                 with st.chat_message("user"):
-                    st.markdown(f"**{msg['username']}**  `{msg['time']}`")
-                    st.write(msg["text"])
+                    st.write(f"**{m['user']}** `{m['time']}`")
+                    st.write(m['text'])
             else:
                 with st.chat_message("assistant"):
-                    st.markdown(f"**{msg['username']}**  `{msg['time']}`")
-                    st.write(msg["text"])
+                    st.write(f"**{m['user']}** `{m['time']}`")
+                    st.write(m['text'])
     
-    # Message input
-    prompt = st.chat_input("Type your message here...")
-    
-    if prompt:
-        new_msg = {
-            "id": str(uuid.uuid4()),
-            "username": st.session_state.username,
-            "text": prompt,
-            "time": datetime.datetime.now().strftime("%I:%M %p")
+    # Input
+    msg = st.chat_input("Type here...")
+    if msg:
+        new = {
+            'user': st.session_state.user,
+            'text': msg,
+            'time': datetime.datetime.now().strftime("%I:%M %p")
         }
-        st.session_state.messages.append(new_msg)
-        save_messages(st.session_state.messages)
+        st.session_state.msgs.append(new)
+        save_msgs(st.session_state.msgs)
         st.rerun()
-    
-    st.markdown("---")
-    st.caption("✨ Be kind • Stay curious • Connect with others ✨")
