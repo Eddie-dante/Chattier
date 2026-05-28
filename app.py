@@ -4,8 +4,6 @@ import uuid
 import hashlib
 import json
 import os
-from PIL import Image
-import io
 
 st.set_page_config(page_title="ChatVerse", page_icon="💬", layout="wide")
 
@@ -43,12 +41,6 @@ if "username" not in st.session_state:
     st.session_state.username = ""
 if "messages" not in st.session_state:
     st.session_state.messages = load_messages()
-if "profile_pics" not in st.session_state:
-    st.session_state.profile_pics = {}
-    users = load_users()
-    for user in users:
-        if "profile_pic" in users[user]:
-            st.session_state.profile_pics[user] = users[user]["profile_pic"]
 
 # Custom CSS - Bright wallpaper
 st.markdown("""
@@ -60,19 +52,6 @@ st.markdown("""
         background-attachment: fixed;
     }
     
-    .chat-message {
-        padding: 1rem;
-        border-radius: 1rem;
-        margin-bottom: 1rem;
-        animation: fadeIn 0.3s ease-in;
-    }
-    
-    @keyframes fadeIn {
-        from { opacity: 0; transform: translateY(10px); }
-        to { opacity: 1; transform: translateY(0); }
-    }
-    
-    /* Glass effect for containers */
     .stApp > header {
         background: rgba(255, 255, 255, 0.1);
         backdrop-filter: blur(10px);
@@ -96,7 +75,6 @@ st.markdown("""
         border-radius: 10px;
     }
     
-    /* Chat message styling */
     [data-testid="stChatMessage"] {
         background: rgba(255, 255, 255, 0.9);
         backdrop-filter: blur(10px);
@@ -105,11 +83,9 @@ st.markdown("""
         margin: 10px 0;
     }
     
-    /* Sidebar styling */
     [data-testid="stSidebar"] {
         background: rgba(255, 255, 255, 0.95);
         backdrop-filter: blur(10px);
-        border-right: 1px solid rgba(255, 255, 255, 0.2);
     }
     
     h1, h2, h3 {
@@ -137,7 +113,7 @@ if not st.session_state.logged_in:
             
             if submitted:
                 users = load_users()
-                if username in users and users[username]["password"] == hash_password(password):
+                if username in users and users[username] == hash_password(password):
                     st.session_state.logged_in = True
                     st.session_state.username = username
                     st.rerun()
@@ -161,12 +137,7 @@ if not st.session_state.logged_in:
                     if new_user in users:
                         st.error("Username already exists")
                     else:
-                        users[new_user] = {
-                            "password": hash_password(new_pass),
-                            "profile_pic": None,
-                            "bio": "",
-                            "joined": datetime.datetime.now().isoformat()
-                        }
+                        users[new_user] = hash_password(new_pass)
                         save_users(users)
                         st.success("Account created! Please sign in.")
 
@@ -189,60 +160,64 @@ else:
     with st.sidebar:
         st.markdown("## 👤 My Profile")
         
-        # Profile picture
-        users_data = load_users()
-        current_user_data = users_data.get(st.session_state.username, {})
-        
-        col1, col2 = st.columns([1, 2])
-        with col1:
-            if current_user_data.get("profile_pic"):
-                st.image(current_user_data["profile_pic"], width=80, caption="Profile")
-            else:
-                st.markdown(f"### 🧑\n\n**{st.session_state.username[0].upper()}**")
-        
-        with col2:
-            st.markdown(f"**@{st.session_state.username}**")
-            if current_user_data.get("bio"):
-                st.caption(current_user_data["bio"])
-        
-        # Edit profile button
-        with st.expander("✏️ Edit Profile"):
-            # Profile picture upload
-            uploaded_file = st.file_uploader("Upload Profile Picture", type=['jpg', 'png', 'jpeg'])
-            if uploaded_file:
-                # Save the image
-                img = Image.open(uploaded_file)
-                # Resize to small size
-                img = img.resize((150, 150))
-                # Save to user data
-                users_data[st.session_state.username]["profile_pic"] = uploaded_file.getvalue()
-                save_users(users_data)
-                st.success("Profile picture updated!")
-                st.rerun()
+        # Edit profile section
+        with st.expander("✏️ Edit Profile", expanded=True):
+            # Change username
+            new_username = st.text_input("Change Username", value=st.session_state.username)
+            if new_username != st.session_state.username:
+                if st.button("Update Username"):
+                    users = load_users()
+                    if new_username not in users:
+                        # Move user data to new username
+                        users[new_username] = users.pop(st.session_state.username)
+                        save_users(users)
+                        st.session_state.username = new_username
+                        st.success("Username updated! Please sign in again.")
+                        st.session_state.logged_in = False
+                        st.rerun()
+                    else:
+                        st.error("Username already taken")
             
-            # Bio
-            new_bio = st.text_area("Bio", value=current_user_data.get("bio", ""), 
-                                   placeholder="Tell us about yourself...")
-            if st.button("Save Bio"):
-                users_data[st.session_state.username]["bio"] = new_bio
-                save_users(users_data)
-                st.success("Bio updated!")
-                st.rerun()
+            # Change password
+            st.markdown("---")
+            st.markdown("#### Change Password")
+            old_pass = st.text_input("Current Password", type="password", key="old")
+            new_pass = st.text_input("New Password", type="password", key="new")
+            confirm_pass = st.text_input("Confirm New Password", type="password", key="confirm")
+            
+            if st.button("Update Password"):
+                users = load_users()
+                if users[st.session_state.username] == hash_password(old_pass):
+                    if new_pass == confirm_pass:
+                        users[st.session_state.username] = hash_password(new_pass)
+                        save_users(users)
+                        st.success("Password updated! Please sign in again.")
+                        st.session_state.logged_in = False
+                        st.rerun()
+                    else:
+                        st.error("New passwords don't match")
+                else:
+                    st.error("Current password is incorrect")
         
         st.markdown("---")
         
         # Chat stats
         st.markdown("## 📊 Chat Stats")
         st.metric("Total Messages", len(st.session_state.messages))
-        if st.session_state.messages:
-            unique_users = len(set(msg.get("username", "") for msg in st.session_state.messages if msg.get("username")))
-            st.metric("Community Members", unique_users)
+        
+        try:
+            if st.session_state.messages:
+                unique_users = len(set(msg["username"] for msg in st.session_state.messages))
+                st.metric("Community Members", unique_users)
+        except:
+            pass
         
         st.markdown("---")
         
         # Clear chat button
         if st.button("🗑️ Clear All Messages", use_container_width=True):
-            if st.checkbox("Confirm delete all messages?"):
+            confirm = st.checkbox("⚠️ Confirm delete all messages?")
+            if confirm:
                 st.session_state.messages = []
                 save_messages(st.session_state.messages)
                 st.success("Chat cleared!")
@@ -250,7 +225,7 @@ else:
         
         st.markdown("---")
         st.markdown("### 🎨 About")
-        st.info("✨ Welcome to ChatVerse! A bright, friendly community forum where everyone can connect, share ideas, and make friends. Be respectful and have fun!")
+        st.info("✨ Welcome to ChatVerse! A bright, friendly community forum where everyone can connect and share ideas. Be respectful and have fun!")
     
     # Display messages
     st.markdown("### 💬 Live Chat")
@@ -259,24 +234,13 @@ else:
         st.info("✨ No messages yet. Start the conversation!")
     else:
         for msg in st.session_state.messages:
-            # Get profile picture if exists
-            users_data = load_users()
-            user_info = users_data.get(msg["username"], {})
-            
             if msg["username"] == st.session_state.username:
                 with st.chat_message("user", avatar="🧑"):
                     st.markdown(f"**{msg['username']}**  `{msg['time']}`")
                     st.write(msg["text"])
             else:
-                # Use profile pic if available
-                avatar = "💬"
-                if user_info.get("profile_pic"):
-                    # Would need to convert bytes to image, using emoji for simplicity
-                    avatar = "👤"
-                with st.chat_message("assistant", avatar=avatar):
+                with st.chat_message("assistant", avatar="💬"):
                     st.markdown(f"**{msg['username']}**  `{msg['time']}`")
-                    if user_info.get("bio"):
-                        st.caption(f"📝 {user_info['bio'][:50]}")
                     st.write(msg["text"])
     
     # Message input
