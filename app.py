@@ -4,6 +4,7 @@ import uuid
 import hashlib
 import json
 import os
+import time
 
 st.set_page_config(page_title="ChatVerse", page_icon="💬", layout="wide")
 
@@ -41,60 +42,98 @@ if "username" not in st.session_state:
     st.session_state.username = ""
 if "messages" not in st.session_state:
     st.session_state.messages = load_messages()
+if "wallpaper" not in st.session_state:
+    st.session_state.wallpaper = "beach"
+if "refresh_counter" not in st.session_state:
+    st.session_state.refresh_counter = 0
 
-# Custom CSS - Bright wallpaper
-st.markdown("""
+# Wallpaper options
+wallpapers = {
+    "beach": "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=1600",
+    "mountains": "https://images.unsplash.com/photo-1518837695005-2083093ee35b?w=1600",
+    "forest": "https://images.unsplash.com/photo-1470071459604-3b5ec3a7fe05?w=1600",
+    "sunset": "https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=1600",
+    "ocean": "https://images.unsplash.com/photo-1505118380757-91f5f5632de0?w=1600",
+    "garden": "https://images.unsplash.com/photo-1416879595882-3373a0480b5b?w=1600",
+    "city": "https://images.unsplash.com/photo-1444723121867-7a241cacace9?w=1600",
+    "stars": "https://images.unsplash.com/photo-1419242902214-272b3f66ee7a?w=1600"
+}
+
+# Auto-refresh mechanism
+def auto_refresh():
+    """Trigger a rerun to show new messages"""
+    if st.session_state.refresh_counter < 100:
+        st.session_state.refresh_counter += 1
+    time.sleep(0.1)
+    st.rerun()
+
+# Custom CSS with dynamic wallpaper
+st.markdown(f"""
 <style>
-    .stApp {
-        background-image: url('https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=1600');
+    .stApp {{
+        background-image: url('{wallpapers[st.session_state.wallpaper]}');
         background-size: cover;
         background-position: center;
         background-attachment: fixed;
-    }
+        transition: background-image 0.5s ease;
+    }}
     
-    .stApp > header {
+    .stApp > header {{
         background: rgba(255, 255, 255, 0.1);
         backdrop-filter: blur(10px);
-    }
+    }}
     
-    .stButton > button {
+    .stButton > button {{
         background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
         color: white;
         border: none;
         transition: all 0.3s ease;
-    }
+    }}
     
-    .stButton > button:hover {
+    .stButton > button:hover {{
         transform: translateY(-2px);
         box-shadow: 0 5px 15px rgba(0,0,0,0.2);
-    }
+    }}
     
-    .stTextInput > div > div > input {
+    .stTextInput > div > div > input {{
         background: rgba(255, 255, 255, 0.9);
         border: 1px solid rgba(255, 255, 255, 0.3);
         border-radius: 10px;
-    }
+    }}
     
-    [data-testid="stChatMessage"] {
+    [data-testid="stChatMessage"] {{
         background: rgba(255, 255, 255, 0.9);
         backdrop-filter: blur(10px);
         border-radius: 15px;
         padding: 10px;
         margin: 10px 0;
-    }
+    }}
     
-    [data-testid="stSidebar"] {
+    [data-testid="stSidebar"] {{
         background: rgba(255, 255, 255, 0.95);
         backdrop-filter: blur(10px);
-    }
+    }}
     
-    h1, h2, h3 {
+    h1, h2, h3 {{
         color: #1a1a2e !important;
-    }
+    }}
     
-    .stMarkdown {
+    .stMarkdown {{
         color: #1a1a2e;
-    }
+    }}
+    
+    /* Auto-refresh indicator */
+    .refresh-indicator {{
+        position: fixed;
+        bottom: 10px;
+        right: 10px;
+        background: rgba(0,0,0,0.5);
+        color: white;
+        padding: 2px 8px;
+        border-radius: 10px;
+        font-size: 10px;
+        z-index: 999;
+    }}
 </style>
 """, unsafe_allow_html=True)
 
@@ -156,19 +195,34 @@ else:
     
     st.markdown("---")
     
-    # Sidebar with profile
+    # Sidebar
     with st.sidebar:
+        st.markdown("## 🎨 Customize")
+        
+        # Wallpaper selector
+        st.markdown("### 🖼️ Change Wallpaper")
+        selected_wallpaper = st.selectbox(
+            "Choose theme",
+            options=list(wallpapers.keys()),
+            format_func=lambda x: x.title(),
+            index=list(wallpapers.keys()).index(st.session_state.wallpaper)
+        )
+        if selected_wallpaper != st.session_state.wallpaper:
+            st.session_state.wallpaper = selected_wallpaper
+            st.rerun()
+        
+        st.markdown("---")
+        
         st.markdown("## 👤 My Profile")
         
         # Edit profile section
-        with st.expander("✏️ Edit Profile", expanded=True):
+        with st.expander("✏️ Edit Profile", expanded=False):
             # Change username
             new_username = st.text_input("Change Username", value=st.session_state.username)
             if new_username != st.session_state.username:
                 if st.button("Update Username"):
                     users = load_users()
                     if new_username not in users:
-                        # Move user data to new username
                         users[new_username] = users.pop(st.session_state.username)
                         save_users(users)
                         st.session_state.username = new_username
@@ -225,10 +279,13 @@ else:
         
         st.markdown("---")
         st.markdown("### 🎨 About")
-        st.info("✨ Welcome to ChatVerse! A bright, friendly community forum where everyone can connect and share ideas. Be respectful and have fun!")
+        st.info("✨ Welcome to ChatVerse! A bright, friendly community forum where everyone can connect.")
     
     # Display messages
     st.markdown("### 💬 Live Chat")
+    
+    # Reload messages from file to show new ones
+    st.session_state.messages = load_messages()
     
     if not st.session_state.messages:
         st.info("✨ No messages yet. Start the conversation!")
@@ -244,7 +301,6 @@ else:
                     st.write(msg["text"])
     
     # Message input
-    st.markdown("---")
     prompt = st.chat_input("Type your message here...")
     
     if prompt:
@@ -256,7 +312,22 @@ else:
         }
         st.session_state.messages.append(new_msg)
         save_messages(st.session_state.messages)
+        st.rerun()  # Immediate refresh
+    
+    # Auto-refresh every 3 seconds to show new messages
+    if st.button("🔄 Refresh Chat", use_container_width=True):
+        st.session_state.messages = load_messages()
         st.rerun()
+    
+    # Auto-refresh timer
+    refresh_placeholder = st.empty()
+    with refresh_placeholder.container():
+        if st.checkbox("Auto-refresh (3 seconds)", value=True):
+            time.sleep(3)
+            st.session_state.messages = load_messages()
+            st.rerun()
+        else:
+            st.caption("📌 Turn on auto-refresh to see new messages instantly")
     
     # Footer
     st.markdown("---")
