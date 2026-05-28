@@ -4,7 +4,6 @@ import uuid
 import hashlib
 import json
 import os
-import time
 
 st.set_page_config(page_title="ChatVerse", page_icon="💬", layout="wide")
 
@@ -42,103 +41,121 @@ if "username" not in st.session_state:
     st.session_state.username = ""
 if "messages" not in st.session_state:
     st.session_state.messages = load_messages()
-if "wallpaper" not in st.session_state:
-    st.session_state.wallpaper = "beach"
-if "last_refresh" not in st.session_state:
-    st.session_state.last_refresh = time.time()
 
-# Wallpaper options
-wallpapers = {
-    "beach": "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=1600",
-    "mountains": "https://images.unsplash.com/photo-1518837695005-2083093ee35b?w=1600",
-    "forest": "https://images.unsplash.com/photo-1470071459604-3b5ec3a7fe05?w=1600",
-    "sunset": "https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=1600",
-    "ocean": "https://images.unsplash.com/photo-1505118380757-91f5f5632de0?w=1600",
-    "garden": "https://images.unsplash.com/photo-1416879595882-3373a0480b5b?w=1600",
-    "city": "https://images.unsplash.com/photo-1444723121867-7a241cacace9?w=1600",
-    "stars": "https://images.unsplash.com/photo-1419242902214-272b3f66ee7a?w=1600"
-}
-
-# Custom CSS with dynamic wallpaper
-st.markdown(f"""
+# Glass morphism CSS
+st.markdown("""
 <style>
-    .stApp {{
-        background-image: url('{wallpapers[st.session_state.wallpaper]}');
-        background-size: cover;
-        background-position: center;
-        background-attachment: fixed;
-        transition: background-image 0.5s ease;
-    }}
+    .stApp {
+        background: linear-gradient(145deg, #0f172a 0%, #1e293b 100%);
+    }
     
-    .stApp > header {{
-        background: rgba(255, 255, 255, 0.1);
+    /* Glass cards for messages */
+    [data-testid="stChatMessage"] {
+        background: rgba(255, 255, 255, 0.08) !important;
+        backdrop-filter: blur(18px) !important;
+        border: 1px solid rgba(255, 255, 255, 0.15) !important;
+        border-radius: 1rem !important;
+        margin-bottom: 1rem !important;
+    }
+    
+    /* Glass sidebar */
+    [data-testid="stSidebar"] {
+        background: rgba(15, 23, 42, 0.8) !important;
+        backdrop-filter: blur(18px) !important;
+        border-right: 1px solid rgba(255, 255, 255, 0.1) !important;
+    }
+    
+    /* Glass inputs */
+    .stTextInput > div > div > input, .stChatInput > div > div > textarea {
+        background: rgba(255, 255, 255, 0.07) !important;
+        border: 1px solid rgba(255, 255, 255, 0.2) !important;
+        border-radius: 2rem !important;
+        color: white !important;
+    }
+    
+    /* Gradient buttons */
+    .stButton > button {
+        background: linear-gradient(135deg, #7c3aed, #a855f7) !important;
+        border: none !important;
+        border-radius: 2rem !important;
+        color: white !important;
+        font-weight: 600 !important;
+    }
+    
+    /* Gradient headers */
+    h1, h2, h3 {
+        background: linear-gradient(135deg, #c084fc, #a78bfa) !important;
+        -webkit-background-clip: text !important;
+        -webkit-text-fill-color: transparent !important;
+    }
+    
+    /* Online badge */
+    .online-badge {
+        background: rgba(255,255,255,0.08);
+        padding: 0.3rem 0.8rem;
+        border-radius: 2rem;
+        font-size: 0.8rem;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+    
+    .online-dot {
+        width: 8px;
+        height: 8px;
+        background: #10b981;
+        border-radius: 50%;
+        animation: pulse 1.5s infinite;
+    }
+    
+    @keyframes pulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.5; }
+    }
+    
+    /* Typing indicator */
+    .typing-indicator {
+        background: rgba(255, 255, 255, 0.08);
         backdrop-filter: blur(10px);
-    }}
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 1rem;
+        padding: 0.5rem 1rem;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        margin-bottom: 1rem;
+    }
     
-    .stButton > button {{
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        color: white;
-        border: none;
-        transition: all 0.3s ease;
-    }}
+    .typing-dot {
+        width: 6px;
+        height: 6px;
+        background: #c084fc;
+        border-radius: 50%;
+        display: inline-block;
+        animation: bounce 1.4s infinite;
+    }
     
-    .stButton > button:hover {{
-        transform: translateY(-2px);
-        box-shadow: 0 5px 15px rgba(0,0,0,0.2);
-    }}
+    .typing-dot:nth-child(1) { animation-delay: -0.32s; }
+    .typing-dot:nth-child(2) { animation-delay: -0.16s; }
     
-    .stTextInput > div > div > input {{
-        background: rgba(255, 255, 255, 0.9);
-        border: 1px solid rgba(255, 255, 255, 0.3);
-        border-radius: 10px;
-    }}
+    @keyframes bounce {
+        0%, 60%, 100% { transform: translateY(0); }
+        30% { transform: translateY(-8px); }
+    }
     
-    [data-testid="stChatMessage"] {{
-        background: rgba(255, 255, 255, 0.9);
-        backdrop-filter: blur(10px);
-        border-radius: 15px;
-        padding: 10px;
-        margin: 10px 0;
-        animation: fadeIn 0.3s ease-in;
-    }}
-    
-    @keyframes fadeIn {{
-        from {{ opacity: 0; transform: translateY(10px); }}
-        to {{ opacity: 1; transform: translateY(0); }}
-    }}
-    
-    [data-testid="stSidebar"] {{
-        background: rgba(255, 255, 255, 0.95);
-        backdrop-filter: blur(10px);
-    }}
-    
-    h1, h2, h3 {{
-        color: #1a1a2e !important;
-    }}
-    
-    .stMarkdown {{
-        color: #1a1a2e;
-    }}
-    
-    /* Auto-refresh indicator */
-    .refresh-indicator {{
+    /* Live indicator */
+    .live {
         position: fixed;
-        bottom: 10px;
-        right: 10px;
-        background: rgba(0,0,0,0.7);
-        color: #10b981;
+        bottom: 20px;
+        right: 20px;
+        background: rgba(124, 58, 237, 0.8);
+        backdrop-filter: blur(10px);
         padding: 4px 12px;
         border-radius: 20px;
         font-size: 11px;
-        font-weight: bold;
+        color: white;
         z-index: 999;
-        animation: pulse 1s infinite;
-    }}
-    
-    @keyframes pulse {{
-        0%, 100% {{ opacity: 0.6; }}
-        50% {{ opacity: 1; }}
-    }}
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -153,7 +170,7 @@ if not st.session_state.logged_in:
         with st.form("login"):
             username = st.text_input("Username")
             password = st.text_input("Password", type="password")
-            submitted = st.form_submit_button("Sign In", use_container_width=True)
+            submitted = st.form_submit_button("Sign In")
             
             if submitted:
                 users = load_users()
@@ -166,10 +183,10 @@ if not st.session_state.logged_in:
     
     with tab2:
         with st.form("signup"):
-            new_user = st.text_input("Choose Username")
-            new_pass = st.text_input("Choose Password", type="password")
+            new_user = st.text_input("Username")
+            new_pass = st.text_input("Password", type="password")
             confirm = st.text_input("Confirm Password", type="password")
-            submitted = st.form_submit_button("Sign Up", use_container_width=True)
+            submitted = st.form_submit_button("Sign Up")
             
             if submitted:
                 if not new_user or not new_pass:
@@ -179,21 +196,27 @@ if not st.session_state.logged_in:
                 else:
                     users = load_users()
                     if new_user in users:
-                        st.error("Username already exists")
+                        st.error("Username exists")
                     else:
                         users[new_user] = hash_password(new_pass)
                         save_users(users)
                         st.success("Account created! Please sign in.")
 
 else:
-    # Main chat
+    # Header
     col1, col2, col3 = st.columns([2, 1, 1])
     with col1:
         st.title("💬 ChatVerse")
     with col2:
-        st.markdown(f"**Welcome, {st.session_state.username}** 👋")
+        online_count = len(set(msg["username"] for msg in st.session_state.messages)) + 1
+        st.markdown(f"""
+        <div class="online-badge">
+            <span class="online-dot"></span>
+            <span>{online_count} online</span>
+        </div>
+        """, unsafe_allow_html=True)
     with col3:
-        if st.button("🚪 Sign Out", use_container_width=True):
+        if st.button("🚪 Sign Out"):
             st.session_state.logged_in = False
             st.session_state.username = ""
             st.rerun()
@@ -202,94 +225,45 @@ else:
     
     # Sidebar
     with st.sidebar:
-        st.markdown("## 🎨 Customize")
-        
-        # Wallpaper selector
-        st.markdown("### 🖼️ Change Wallpaper")
-        selected_wallpaper = st.selectbox(
-            "Choose theme",
-            options=list(wallpapers.keys()),
-            format_func=lambda x: x.title(),
-            index=list(wallpapers.keys()).index(st.session_state.wallpaper)
-        )
-        if selected_wallpaper != st.session_state.wallpaper:
-            st.session_state.wallpaper = selected_wallpaper
-            st.rerun()
-        
+        st.markdown(f"### 👤 {st.session_state.username}")
         st.markdown("---")
-        
-        st.markdown("## 👤 My Profile")
-        
-        # Edit profile section
-        with st.expander("✏️ Edit Profile", expanded=False):
-            # Change username
-            new_username = st.text_input("Change Username", value=st.session_state.username)
-            if new_username != st.session_state.username:
-                if st.button("Update Username"):
-                    users = load_users()
-                    if new_username not in users:
-                        users[new_username] = users.pop(st.session_state.username)
-                        save_users(users)
-                        st.session_state.username = new_username
-                        st.success("Username updated! Please sign in again.")
-                        st.session_state.logged_in = False
-                        st.rerun()
-                    else:
-                        st.error("Username already taken")
-            
-            # Change password
-            st.markdown("---")
-            st.markdown("#### Change Password")
-            old_pass = st.text_input("Current Password", type="password", key="old")
-            new_pass = st.text_input("New Password", type="password", key="new")
-            confirm_pass = st.text_input("Confirm New Password", type="password", key="confirm")
-            
-            if st.button("Update Password"):
-                users = load_users()
-                if users[st.session_state.username] == hash_password(old_pass):
-                    if new_pass == confirm_pass:
-                        users[st.session_state.username] = hash_password(new_pass)
-                        save_users(users)
-                        st.success("Password updated! Please sign in again.")
-                        st.session_state.logged_in = False
-                        st.rerun()
-                    else:
-                        st.error("New passwords don't match")
-                else:
-                    st.error("Current password is incorrect")
-        
-        st.markdown("---")
-        
-        # Chat stats
-        st.markdown("## 📊 Chat Stats")
+        st.markdown("### 📊 Stats")
         st.metric("Total Messages", len(st.session_state.messages))
         
-        try:
-            if st.session_state.messages:
-                unique_users = len(set(msg["username"] for msg in st.session_state.messages))
-                st.metric("Community Members", unique_users)
-        except:
-            pass
+        if st.session_state.messages:
+            unique = len(set(msg["username"] for msg in st.session_state.messages))
+            st.metric("Community Members", unique)
         
         st.markdown("---")
         
-        # Clear chat button
-        if st.button("🗑️ Clear All Messages", use_container_width=True):
-            confirm = st.checkbox("⚠️ Confirm delete all messages?")
-            if confirm:
+        if st.button("🗑️ Clear Chat"):
+            if st.checkbox("Confirm?"):
                 st.session_state.messages = []
                 save_messages(st.session_state.messages)
-                st.success("Chat cleared!")
                 st.rerun()
         
         st.markdown("---")
-        st.markdown("### 🎨 About")
-        st.info("✨ Welcome to ChatVerse! A bright, friendly community forum where everyone can connect.")
+        st.info("✨ Glass morphism design • Live chat")
     
-    # Display messages
+    # Chat area
     st.markdown("### 💬 Live Chat")
     
-    # Reload messages from file to show new ones
+    # Random typing indicator (for fun)
+    import random
+    if random.random() < 0.1 and len(st.session_state.messages) > 2:
+        others = list(set(msg["username"] for msg in st.session_state.messages if msg["username"] != st.session_state.username))
+        if others:
+            typing = random.choice(others)
+            st.markdown(f"""
+            <div class="typing-indicator">
+                <span>✍️ {typing}</span>
+                <span class="typing-dot"></span>
+                <span class="typing-dot"></span>
+                <span class="typing-dot"></span>
+            </div>
+            """, unsafe_allow_html=True)
+    
+    # Load and display messages
     st.session_state.messages = load_messages()
     
     if not st.session_state.messages:
@@ -297,16 +271,16 @@ else:
     else:
         for msg in st.session_state.messages:
             if msg["username"] == st.session_state.username:
-                with st.chat_message("user", avatar="🧑"):
+                with st.chat_message("user"):
                     st.markdown(f"**{msg['username']}**  `{msg['time']}`")
                     st.write(msg["text"])
             else:
-                with st.chat_message("assistant", avatar="💬"):
+                with st.chat_message("assistant"):
                     st.markdown(f"**{msg['username']}**  `{msg['time']}`")
                     st.write(msg["text"])
     
     # Message input
-    prompt = st.chat_input("Type your message here...")
+    prompt = st.chat_input("Type your message...")
     
     if prompt:
         new_msg = {
@@ -319,10 +293,5 @@ else:
         save_messages(st.session_state.messages)
         st.rerun()
     
-    # SUPER FAST AUTO-REFRESH (0.0005 seconds = 2000 times per second)
-    # Refresh indicator
-    st.markdown('<div class="refresh-indicator">⚡ LIVE • Auto-refreshing</div>', unsafe_allow_html=True)
-    
-    # Ultra-fast auto-refresh
-    time.sleep(0.0005)  # 0.5 milliseconds refresh
-    st.rerun()
+    # Live indicator
+    st.markdown('<div class="live">⚡ LIVE</div>', unsafe_allow_html=True)
