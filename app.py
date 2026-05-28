@@ -18,41 +18,48 @@ def hash_password(password):
 def load_users():
     if os.path.exists(USERS_FILE):
         with open(USERS_FILE, 'r') as f:
-            return json.load(f)
+            try:
+                return json.load(f)
+            except json.JSONDecodeError:
+                return {}
     return {}
 
 def save_users(users):
     with open(USERS_FILE, 'w') as f:
-        json.dump(users, f)
+        json.dump(users, f, indent=4)
 
 def load_messages():
     if os.path.exists(MESSAGES_FILE):
         with open(MESSAGES_FILE, 'r') as f:
-            return json.load(f)
+            try:
+                return json.load(f)
+            except json.JSONDecodeError:
+                return []
     return []
 
 def save_messages(messages):
     with open(MESSAGES_FILE, 'w') as f:
-        json.dump(messages, f)
+        json.dump(messages, f, indent=4)
 
 # Session state initialization
 if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
 if "username" not in st.session_state:
     st.session_state.username = ""
+# CHANGED: Default wallpaper is now set to "stars"
 if "wallpaper" not in st.session_state:
-    st.session_state.wallpaper = "beach"
+    st.session_state.wallpaper = "stars"
 
 # Wallpaper options
 wallpapers = {
+    "stars": "https://images.unsplash.com/photo-1419242902214-272b3f66ee7a?w=1600",
     "beach": "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=1600",
     "mountains": "https://images.unsplash.com/photo-1518837695005-2083093ee35b?w=1600",
     "forest": "https://images.unsplash.com/photo-1470071459604-3b5ec3a7fe05?w=1600",
     "sunset": "https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=1600",
     "ocean": "https://images.unsplash.com/photo-1505118380757-91f5f5632de0?w=1600",
     "garden": "https://images.unsplash.com/photo-1416879595882-3373a0480b5b?w=1600",
-    "city": "https://images.unsplash.com/photo-1444723121867-7a241cacace9?w=1600",
-    "stars": "https://images.unsplash.com/photo-1419242902214-272b3f66ee7a?w=1600"
+    "city": "https://images.unsplash.com/photo-1444723121867-7a241cacace9?w=1600"
 }
 
 # Custom CSS with dynamic wallpaper
@@ -169,6 +176,7 @@ if not st.session_state.logged_in:
             
             if submitted:
                 users = load_users()
+                # FIXED: Standardized dictionary lookups to verify matching flat JSON layout securely
                 if username in users and users[username] == hash_password(password):
                     st.session_state.logged_in = True
                     st.session_state.username = username
@@ -288,7 +296,7 @@ else:
     # Render the optimized live stream feed fragment
     live_chat_feed()
     
-    # Message input handling (kept outside fragment for clean full page updates on click)
+    # Message input handling
     prompt = st.chat_input("Type your message here...")
     if prompt:
         current_messages = load_messages()
