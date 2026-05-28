@@ -35,17 +35,13 @@ def save_messages(messages):
     with open(MESSAGES_FILE, 'w') as f:
         json.dump(messages, f)
 
-# Session state
+# Session state initialization
 if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
 if "username" not in st.session_state:
     st.session_state.username = ""
-if "messages" not in st.session_state:
-    st.session_state.messages = load_messages()
 if "wallpaper" not in st.session_state:
     st.session_state.wallpaper = "beach"
-if "last_refresh" not in st.session_state:
-    st.session_state.last_refresh = time.time()
 
 # Wallpaper options
 wallpapers = {
@@ -69,30 +65,25 @@ st.markdown(f"""
         background-attachment: fixed;
         transition: background-image 0.5s ease;
     }}
-    
     .stApp > header {{
         background: rgba(255, 255, 255, 0.1);
         backdrop-filter: blur(10px);
     }}
-    
     .stButton > button {{
         background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
         color: white;
         border: none;
         transition: all 0.3s ease;
     }}
-    
     .stButton > button:hover {{
         transform: translateY(-2px);
         box-shadow: 0 5px 15px rgba(0,0,0,0.2);
     }}
-    
     .stTextInput > div > div > input {{
         background: rgba(255, 255, 255, 0.9);
         border: 1px solid rgba(255, 255, 255, 0.3);
         border-radius: 10px;
     }}
-    
     [data-testid="stChatMessage"] {{
         background: rgba(255, 255, 255, 0.9);
         backdrop-filter: blur(10px);
@@ -101,26 +92,17 @@ st.markdown(f"""
         margin: 10px 0;
         animation: fadeIn 0.3s ease-in;
     }}
-    
     @keyframes fadeIn {{
         from {{ opacity: 0; transform: translateY(10px); }}
         to {{ opacity: 1; transform: translateY(0); }}
     }}
-    
     [data-testid="stSidebar"] {{
         background: rgba(255, 255, 255, 0.95);
         backdrop-filter: blur(10px);
     }}
+    h1, h2, h3 {{ color: #1a1a2e !important; }}
+    .stMarkdown {{ color: #1a1a2e; }}
     
-    h1, h2, h3 {{
-        color: #1a1a2e !important;
-    }}
-    
-    .stMarkdown {{
-        color: #1a1a2e;
-    }}
-    
-    /* Auto-refresh indicator */
     .refresh-indicator {{
         position: fixed;
         bottom: 10px;
@@ -132,9 +114,8 @@ st.markdown(f"""
         font-size: 11px;
         font-weight: bold;
         z-index: 999;
-        animation: pulse 1s infinite;
+        animation: pulse 1.5s infinite;
     }}
-    
     @keyframes pulse {{
         0%, 100% {{ opacity: 0.6; }}
         50% {{ opacity: 1; }}
@@ -142,7 +123,38 @@ st.markdown(f"""
 </style>
 """, unsafe_allow_html=True)
 
-# Authentication
+# Dialog Modal for Clearing Chat Safely
+@st.dialog("⚠️ Clear Chat History")
+def clear_messages_dialog():
+    st.write("Are you absolutely sure you want to delete all forum messages? This action cannot be undone.")
+    if st.button("Yes, Clear Everything", type="primary", use_container_width=True):
+        save_messages([])
+        st.success("Chat history cleared!")
+        time.sleep(1)
+        st.rerun()
+
+# Isolated Fragment for high-performance background polling (runs every 3 seconds)
+@st.fragment(run_every=3)
+def live_chat_feed():
+    st.markdown("### 💬 Live Chat")
+    messages = load_messages()
+    
+    if not messages:
+        st.info("✨ No messages yet. Start the conversation!")
+    else:
+        for msg in messages:
+            if msg["username"] == st.session_state.username:
+                with st.chat_message("user", avatar="🧑"):
+                    st.markdown(f"**{msg['username']}** `{msg['time']}`")
+                    st.write(msg["text"])
+            else:
+                with st.chat_message("assistant", avatar="💬"):
+                    st.markdown(f"**{msg['username']}** `{msg['time']}`")
+                    st.write(msg["text"])
+    
+    st.markdown('<div class="refresh-indicator">⚡ LIVE FEED ACTIVE</div>', unsafe_allow_html=True)
+
+# Authentication Interface
 if not st.session_state.logged_in:
     st.title("💬 ChatVerse")
     st.markdown("### Welcome to the Community Forum")
@@ -186,7 +198,7 @@ if not st.session_state.logged_in:
                         st.success("Account created! Please sign in.")
 
 else:
-    # Main chat
+    # Main Dashboard Header
     col1, col2, col3 = st.columns([2, 1, 1])
     with col1:
         st.title("💬 ChatVerse")
@@ -200,7 +212,7 @@ else:
     
     st.markdown("---")
     
-    # Sidebar
+    # Sidebar Setup
     with st.sidebar:
         st.markdown("## 🎨 Customize")
         
@@ -217,12 +229,10 @@ else:
             st.rerun()
         
         st.markdown("---")
-        
         st.markdown("## 👤 My Profile")
         
         # Edit profile section
         with st.expander("✏️ Edit Profile", expanded=False):
-            # Change username
             new_username = st.text_input("Change Username", value=st.session_state.username)
             if new_username != st.session_state.username:
                 if st.button("Update Username"):
@@ -231,13 +241,12 @@ else:
                         users[new_username] = users.pop(st.session_state.username)
                         save_users(users)
                         st.session_state.username = new_username
-                        st.success("Username updated! Please sign in again.")
+                        st.success("Username updated! Sign in again.")
                         st.session_state.logged_in = False
                         st.rerun()
                     else:
                         st.error("Username already taken")
             
-            # Change password
             st.markdown("---")
             st.markdown("#### Change Password")
             old_pass = st.text_input("Current Password", type="password", key="old")
@@ -250,7 +259,7 @@ else:
                     if new_pass == confirm_pass:
                         users[st.session_state.username] = hash_password(new_pass)
                         save_users(users)
-                        st.success("Password updated! Please sign in again.")
+                        st.success("Password updated! Sign in again.")
                         st.session_state.logged_in = False
                         st.rerun()
                     else:
@@ -259,70 +268,36 @@ else:
                     st.error("Current password is incorrect")
         
         st.markdown("---")
-        
-        # Chat stats
         st.markdown("## 📊 Chat Stats")
-        st.metric("Total Messages", len(st.session_state.messages))
+        current_msgs = load_messages()
+        st.metric("Total Messages", len(current_msgs))
         
-        try:
-            if st.session_state.messages:
-                unique_users = len(set(msg["username"] for msg in st.session_state.messages))
-                st.metric("Community Members", unique_users)
-        except:
-            pass
+        if current_msgs:
+            unique_users = len(set(msg["username"] for msg in current_msgs))
+            st.metric("Community Members", unique_users)
         
         st.markdown("---")
         
-        # Clear chat button
+        # Trigger safe Dialog confirmation
         if st.button("🗑️ Clear All Messages", use_container_width=True):
-            confirm = st.checkbox("⚠️ Confirm delete all messages?")
-            if confirm:
-                st.session_state.messages = []
-                save_messages(st.session_state.messages)
-                st.success("Chat cleared!")
-                st.rerun()
-        
+            clear_messages_dialog()
+            
         st.markdown("---")
-        st.markdown("### 🎨 About")
-        st.info("✨ Welcome to ChatVerse! A bright, friendly community forum where everyone can connect.")
+        st.info("✨ Welcome to ChatVerse! A bright, friendly community forum.")
     
-    # Display messages
-    st.markdown("### 💬 Live Chat")
+    # Render the optimized live stream feed fragment
+    live_chat_feed()
     
-    # Reload messages from file to show new ones
-    st.session_state.messages = load_messages()
-    
-    if not st.session_state.messages:
-        st.info("✨ No messages yet. Start the conversation!")
-    else:
-        for msg in st.session_state.messages:
-            if msg["username"] == st.session_state.username:
-                with st.chat_message("user", avatar="🧑"):
-                    st.markdown(f"**{msg['username']}**  `{msg['time']}`")
-                    st.write(msg["text"])
-            else:
-                with st.chat_message("assistant", avatar="💬"):
-                    st.markdown(f"**{msg['username']}**  `{msg['time']}`")
-                    st.write(msg["text"])
-    
-    # Message input
+    # Message input handling (kept outside fragment for clean full page updates on click)
     prompt = st.chat_input("Type your message here...")
-    
     if prompt:
+        current_messages = load_messages()
         new_msg = {
             "id": str(uuid.uuid4()),
             "username": st.session_state.username,
             "text": prompt,
             "time": datetime.datetime.now().strftime("%I:%M %p")
         }
-        st.session_state.messages.append(new_msg)
-        save_messages(st.session_state.messages)
+        current_messages.append(new_msg)
+        save_messages(current_messages)
         st.rerun()
-    
-    # SUPER FAST AUTO-REFRESH (0.0005 seconds = 2000 times per second)
-    # Refresh indicator
-    st.markdown('<div class="refresh-indicator">⚡ LIVE • Auto-refreshing</div>', unsafe_allow_html=True)
-    
-    # Ultra-fast auto-refresh
-    time.sleep(0.0005)  # 0.5 milliseconds refresh
-    st.rerun()
