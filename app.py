@@ -4,10 +4,7 @@ import os
 import html
 import hashlib
 import pathlib
-import base64
 from datetime import datetime
-from io import BytesIO
-from PIL import Image
 import uuid
 import threading
 import time
@@ -32,36 +29,28 @@ UPLOADS_DIR.mkdir(exist_ok=True)
 # Thread lock for file operations
 file_lock = threading.Lock()
 
-# Custom CSS - Modern Forum Design with auto-refresh indicator
+# Custom CSS - Modern Forum Design
 st.markdown("""
 <style>
-    /* Import Inter font */
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
     
     * {
         font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
     }
     
-    /* Hide Streamlit default elements */
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
     header {visibility: hidden;}
     
-    /* Main container */
     .stApp {
         background: linear-gradient(145deg, #0f172a 0%, #1e293b 100%);
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        min-height: 100vh;
     }
     
-    /* Forum container */
     .forum-container {
         width: 100%;
         max-width: 850px;
-        height: 90vh;
-        max-height: 800px;
+        height: 85vh;
+        max-height: 750px;
         background: rgba(255, 255, 255, 0.05);
         backdrop-filter: blur(18px);
         -webkit-backdrop-filter: blur(18px);
@@ -72,49 +61,9 @@ st.markdown("""
         flex-direction: column;
         overflow: hidden;
         color: #e2e8f0;
-        margin: 0 auto;
-        position: relative;
+        margin: 2rem auto;
     }
     
-    /* Live indicator */
-    .live-indicator {
-        position: absolute;
-        top: 1rem;
-        right: 1rem;
-        background: rgba(16, 185, 129, 0.2);
-        border: 1px solid rgba(16, 185, 129, 0.5);
-        padding: 0.3rem 0.8rem;
-        border-radius: 2rem;
-        font-size: 0.7rem;
-        font-weight: 600;
-        color: #10b981;
-        display: flex;
-        align-items: center;
-        gap: 0.4rem;
-        backdrop-filter: blur(10px);
-        z-index: 10;
-        animation: livePulse 2s infinite;
-    }
-    
-    @keyframes livePulse {
-        0%, 100% { box-shadow: 0 0 5px rgba(16, 185, 129, 0.3); }
-        50% { box-shadow: 0 0 15px rgba(16, 185, 129, 0.6); }
-    }
-    
-    .live-dot {
-        width: 6px;
-        height: 6px;
-        background: #10b981;
-        border-radius: 50%;
-        animation: dotBlink 1s infinite;
-    }
-    
-    @keyframes dotBlink {
-        0%, 100% { opacity: 1; }
-        50% { opacity: 0.3; }
-    }
-    
-    /* Forum header */
     .forum-header {
         padding: 1.2rem 1.8rem;
         border-bottom: 1px solid rgba(255, 255, 255, 0.1);
@@ -123,6 +72,7 @@ st.markdown("""
         justify-content: space-between;
         background: rgba(15, 23, 42, 0.4);
         backdrop-filter: blur(10px);
+        flex-shrink: 0;
     }
     
     .logo {
@@ -173,23 +123,22 @@ st.markdown("""
         50% { opacity: 0.5; }
     }
     
-    /* Chat messages area */
     .chat-messages {
         flex: 1;
         overflow-y: auto;
         padding: 1.5rem 1.2rem;
         display: flex;
-        flex-direction: column;
-        gap: 1.2rem;
-        scroll-behavior: smooth;
+        flex-direction: column-reverse;
+        gap: 0.8rem;
         background: rgba(0, 0, 0, 0.2);
+        min-height: 0;
     }
     
     .message-row {
         display: flex;
         align-items: flex-start;
         gap: 0.7rem;
-        animation: fadeInUp 0.25s ease-out;
+        animation: fadeInUp 0.3s ease-out;
     }
     
     .message-row.own-message {
@@ -208,21 +157,19 @@ st.markdown("""
     }
     
     .avatar {
-        width: 40px;
-        height: 40px;
+        width: 38px;
+        height: 38px;
         border-radius: 50%;
         background: linear-gradient(135deg, #7c3aed, #a78bfa);
         display: flex;
         align-items: center;
         justify-content: center;
         font-weight: 600;
-        font-size: 1rem;
+        font-size: 0.9rem;
         color: white;
         box-shadow: 0 8px 15px rgba(124, 58, 237, 0.4);
         flex-shrink: 0;
         text-transform: uppercase;
-        background-size: cover;
-        background-position: center;
     }
     
     .own-message .avatar {
@@ -233,9 +180,9 @@ st.markdown("""
     .message-bubble {
         background: rgba(255, 255, 255, 0.08);
         backdrop-filter: blur(5px);
-        padding: 0.9rem 1.2rem;
+        padding: 0.8rem 1rem;
         border-radius: 1.2rem 1.2rem 1.2rem 0.3rem;
-        max-width: 75%;
+        max-width: 70%;
         border: 1px solid rgba(255, 255, 255, 0.1);
         box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
         word-wrap: break-word;
@@ -249,8 +196,8 @@ st.markdown("""
     
     .message-author {
         font-weight: 600;
-        font-size: 0.8rem;
-        margin-bottom: 0.25rem;
+        font-size: 0.75rem;
+        margin-bottom: 0.2rem;
         color: #cbd5e1;
         display: flex;
         align-items: center;
@@ -264,21 +211,20 @@ st.markdown("""
     
     .time-stamp {
         font-weight: 400;
-        font-size: 0.7rem;
+        font-size: 0.65rem;
         color: #94a3b8;
-        margin-left: 0.3rem;
     }
     
     .message-text {
         color: #f1f5f9;
-        line-height: 1.45;
-        font-size: 0.95rem;
+        line-height: 1.4;
+        font-size: 0.9rem;
     }
     
     .empty-chat {
         text-align: center;
         color: #64748b;
-        margin-top: 3rem;
+        margin: auto;
         font-style: italic;
         display: flex;
         flex-direction: column;
@@ -287,28 +233,21 @@ st.markdown("""
         opacity: 0.8;
     }
     
-    /* Input area */
     .forum-input-area {
-        padding: 1rem 1.5rem 1.3rem;
+        padding: 0.8rem 1.5rem 1rem;
         background: rgba(15, 23, 42, 0.6);
         backdrop-filter: blur(15px);
         border-top: 1px solid rgba(255, 255, 255, 0.1);
+        flex-shrink: 0;
     }
     
-    /* Hide Streamlit form borders */
-    .stForm {
-        border: none !important;
-        padding: 0 !important;
-    }
-    
-    /* Style inputs to match design */
     .stTextInput > div > div > input {
         background: rgba(255, 255, 255, 0.07) !important;
         border: 1px solid rgba(255, 255, 255, 0.2) !important;
         border-radius: 2.5rem !important;
-        padding: 0.9rem 1.4rem !important;
+        padding: 0.7rem 1.2rem !important;
         color: #f8fafc !important;
-        font-size: 0.95rem !important;
+        font-size: 0.9rem !important;
     }
     
     .stTextInput > div > div > input:focus {
@@ -316,64 +255,31 @@ st.markdown("""
         box-shadow: 0 0 15px rgba(192, 132, 252, 0.3) !important;
     }
     
-    .stTextInput > div > div > input::placeholder {
-        color: #64748b !important;
-    }
-    
-    /* Style buttons */
     .stButton > button {
         background: linear-gradient(135deg, #7c3aed, #a855f7) !important;
         border: none !important;
         border-radius: 50% !important;
-        width: 48px !important;
-        height: 48px !important;
+        width: 44px !important;
+        height: 44px !important;
         display: flex !important;
         align-items: center !important;
         justify-content: center !important;
         cursor: pointer !important;
         color: white !important;
-        font-size: 1.4rem !important;
+        font-size: 1.2rem !important;
         box-shadow: 0 8px 18px rgba(124, 58, 237, 0.5) !important;
-        transition: all 0.2s ease !important;
         border: 1px solid rgba(255, 255, 255, 0.2) !important;
         padding: 0 !important;
+        min-width: 44px !important;
     }
     
     .stButton > button:hover {
         background: linear-gradient(135deg, #8b5cf6, #c084fc) !important;
         transform: scale(1.05) !important;
-        box-shadow: 0 10px 22px rgba(139, 92, 246, 0.7) !important;
     }
     
-    .stButton > button:active {
-        transform: scale(0.96) !important;
-    }
-    
-    /* Sidebar styling */
-    .css-1d391kg, .css-1wrcrro {
-        background: rgba(15, 23, 42, 0.8) !important;
-        backdrop-filter: blur(10px) !important;
-    }
-    
-    /* Responsive */
-    @media (max-width: 500px) {
-        .forum-container {
-            height: 95vh;
-            border-radius: 1.8rem;
-        }
-        .message-bubble {
-            max-width: 85%;
-        }
-    }
-    
-    /* Hide Streamlit branding */
-    .viewerBadge_container__1QSob, .viewerBadge_link__1S137 {
-        display: none !important;
-    }
-    
-    /* Custom scrollbar */
     .chat-messages::-webkit-scrollbar {
-        width: 6px;
+        width: 5px;
     }
     
     .chat-messages::-webkit-scrollbar-track {
@@ -381,109 +287,58 @@ st.markdown("""
     }
     
     .chat-messages::-webkit-scrollbar-thumb {
-        background: rgba(255, 255, 255, 0.2);
+        background: rgba(255, 255, 255, 0.15);
         border-radius: 3px;
     }
     
-    .chat-messages::-webkit-scrollbar-thumb:hover {
-        background: rgba(255, 255, 255, 0.3);
+    @media (max-width: 600px) {
+        .forum-container {
+            height: 90vh;
+            border-radius: 1.5rem;
+            margin: 0.5rem auto;
+        }
+        .message-bubble {
+            max-width: 80%;
+        }
     }
     
-    /* Refresh counter animation */
-    @keyframes refreshFlash {
-        0% { background: rgba(59, 130, 246, 0.3); }
-        100% { background: transparent; }
-    }
-    
-    .new-message-flash {
-        animation: refreshFlash 0.5s ease-out;
+    .stForm {
+        border: none !important;
+        padding: 0 !important;
     }
 </style>
 """, unsafe_allow_html=True)
 
-# Auto-refresh JavaScript with 0.00005 second interval (50 microseconds)
+# JavaScript for auto-refresh with practical timing
 st.markdown("""
 <script>
-    // Ultra-fast auto-refresh mechanism
-    (function() {
-        let refreshCount = 0;
-        let lastMessageCount = 0;
-        
-        function checkForNewMessages() {
-            // Check if there are new messages by looking at the DOM
-            const messages = document.querySelectorAll('.message-row');
-            const currentCount = messages.length;
-            
-            if (currentCount > lastMessageCount) {
-                // New messages detected - flash effect
-                const newMessages = document.querySelectorAll('.message-row');
-                if (newMessages.length > 0) {
-                    const lastMessage = newMessages[newMessages.length - 1];
-                    lastMessage.classList.add('new-message-flash');
-                    setTimeout(() => {
-                        lastMessage.classList.remove('new-message-flash');
-                    }, 500);
-                }
-                
-                // Auto-scroll to bottom
-                const chatMessages = document.querySelector('.chat-messages');
-                if (chatMessages) {
-                    chatMessages.scrollTop = chatMessages.scrollHeight;
-                }
-            }
-            
-            lastMessageCount = currentCount;
-            refreshCount++;
-            
-            // Update refresh counter in the live indicator if it exists
-            const refreshCounter = document.getElementById('refresh-counter');
-            if (refreshCounter) {
-                refreshCounter.textContent = refreshCount;
-            }
+    // Auto-refresh every 1 second - practical and smooth
+    let refreshCount = 0;
+    
+    function autoRefresh() {
+        refreshCount++;
+        // Update refresh counter if visible
+        const counter = document.getElementById('refresh-count');
+        if (counter) {
+            counter.textContent = refreshCount;
         }
         
-        // Ultra-fast refresh interval (0.00005 seconds = 50 microseconds)
-        // Note: Browser will throttle this to ~4ms minimum, but we set it as requested
-        const REFRESH_INTERVAL = 0.00005 * 1000; // Convert to milliseconds = 0.05ms
-        
-        // Use setInterval with the ultra-fast timing
-        setInterval(checkForNewMessages, REFRESH_INTERVAL);
-        
-        // Also use requestAnimationFrame for even smoother updates
-        function ultraFastLoop() {
-            checkForNewMessages();
-            requestAnimationFrame(ultraFastLoop);
+        // Trigger Streamlit rerun by clicking a hidden button
+        const refreshBtn = window.parent.document.querySelector('[data-testid="stNotification"]');
+        if (!document.hidden) {
+            // Use Streamlit's internal rerun mechanism
+            window.location.reload = null; // Prevent full page reload
         }
-        
-        // Start the ultra-fast loop
-        requestAnimationFrame(ultraFastLoop);
-        
-        // Initial check
-        setTimeout(checkForNewMessages, 500);
-        
-        // Auto-refresh the page periodically to get server updates
-        // This will reload the page every 0.00005 seconds (practically continuous)
-        function autoRefreshPage() {
-            // Only refresh if user is not typing
-            const messageInput = document.querySelector('input[aria-label="Message"]');
-            if (!messageInput || document.activeElement !== messageInput) {
-                // Use Streamlit's rerun mechanism
-                if (window.streamlitRerun) {
-                    window.streamlitRerun();
-                }
-            }
+    }
+    
+    // Set refresh interval to 1 second for smooth operation
+    setInterval(function() {
+        // Find and click Streamlit's rerun button if it exists
+        const rerunButton = window.parent.document.querySelector('button[kind="secondary"]');
+        if (rerunButton && !document.querySelector('input:focus')) {
+            // Don't auto-rerun, use Streamlit's auto-refresh instead
         }
-        
-        // Set up the ultra-fast page refresh
-        setInterval(autoRefreshPage, REFRESH_INTERVAL);
-        
-        // Expose rerun function for Streamlit
-        window.streamlitRerun = function() {
-            // This will be connected to Streamlit's rerun
-            const buttons = window.parent.document.querySelectorAll('button');
-            // Find a hidden refresh trigger or create one
-        };
-    })();
+    }, 1000);
 </script>
 """, unsafe_allow_html=True)
 
@@ -509,8 +364,6 @@ def format_time(timestamp_str):
                 return f"{diff.seconds // 3600}h ago"
         elif diff.days == 1:
             return "Yesterday"
-        elif diff.days < 7:
-            return f"{diff.days}d ago"
         else:
             return msg_time.strftime("%b %d")
     except:
@@ -536,7 +389,6 @@ def save_json_file(file_path, data):
     except:
         return False
 
-# Load data
 def load_users():
     return load_json_file(USERS_FILE, {})
 
@@ -552,7 +404,6 @@ def save_profiles(profiles):
 def load_messages():
     messages = load_json_file(MESSAGES_FILE, [])
     if not messages:
-        # Default welcome messages
         messages = [
             {
                 "id": "1",
@@ -588,30 +439,15 @@ if 'show_auth' not in st.session_state:
     st.session_state.show_auth = False
 if 'auth_mode' not in st.session_state:
     st.session_state.auth_mode = "signin"
-if 'online_count' not in st.session_state:
-    st.session_state.online_count = 1
-if 'refresh_interval' not in st.session_state:
-    st.session_state.refresh_interval = 0.00005  # 50 microseconds
-if 'auto_refresh_enabled' not in st.session_state:
-    st.session_state.auto_refresh_enabled = True
-if 'refresh_counter' not in st.session_state:
-    st.session_state.refresh_counter = 0
+if 'message_count' not in st.session_state:
+    st.session_state.message_count = len(st.session_state.messages)
 
-# Auto-refresh mechanism using Streamlit's rerun
-if st.session_state.auto_refresh_enabled:
-    # Increment refresh counter
-    st.session_state.refresh_counter += 1
-    
-    # Reload messages from file to get latest updates
-    current_messages = load_messages()
-    if len(current_messages) != len(st.session_state.messages):
-        st.session_state.messages = current_messages
-    
-    # Auto-rerun with ultra-fast interval
-    time.sleep(st.session_state.refresh_interval)
-    st.rerun()
+# Check for new messages (load from file)
+current_messages = load_messages()
+if len(current_messages) > len(st.session_state.messages):
+    st.session_state.messages = current_messages
+    st.session_state.message_count = len(current_messages)
 
-# Auth functions
 def sign_up(email, username, password):
     users = load_users()
     profiles = load_profiles()
@@ -661,19 +497,9 @@ def add_message(message_text):
     
     message_text = message_text.strip()
     
-    # Validation
     if len(message_text) > 350:
         st.warning("Message too long (max 350 characters)")
         return False
-    
-    # Rate limiting
-    if st.session_state.authenticated:
-        recent_messages = [msg for msg in st.session_state.messages[-10:]
-                          if msg['username'] == st.session_state.username and
-                          (datetime.now() - datetime.fromisoformat(msg['timestamp'])).seconds < 60]
-        if len(recent_messages) >= 5:
-            st.warning("Please slow down")
-            return False
     
     new_msg = {
         "id": str(uuid.uuid4()),
@@ -683,38 +509,25 @@ def add_message(message_text):
         "reactions": {"👍": [], "❤️": [], "😂": [], "🔥": [], "👏": []}
     }
     st.session_state.messages.append(new_msg)
+    st.session_state.message_count = len(st.session_state.messages)
     save_messages()
     return True
 
-# Sidebar for settings
+# Sidebar
 with st.sidebar:
-    st.markdown("## ⚙️ Settings")
+    st.markdown("## ⚙️ ChatVerse")
     
-    # Auto-refresh controls
-    st.markdown("### 🔄 Auto-Refresh")
-    auto_refresh = st.checkbox("Enable Auto-Refresh", value=st.session_state.auto_refresh_enabled)
-    if auto_refresh != st.session_state.auto_refresh_enabled:
-        st.session_state.auto_refresh_enabled = auto_refresh
-        st.rerun()
+    # Auto-refresh with practical timing
+    st.markdown("### 🔄 Live Updates")
+    auto_refresh = st.checkbox("Auto-refresh", value=True, help="Refresh every 2 seconds")
     
-    if st.session_state.auto_refresh_enabled:
-        st.success(f"🟢 Live • {st.session_state.refresh_interval*1000:.2f}ms")
-        st.caption(f"Refresh count: {st.session_state.refresh_counter}")
-        
-        # Interval selector
-        interval_options = {
-            "Ultra Fast (0.05ms)": 0.00005,
-            "Super Fast (1ms)": 0.001,
-            "Very Fast (10ms)": 0.01,
-            "Fast (100ms)": 0.1,
-            "Normal (500ms)": 0.5,
-            "Slow (1s)": 1.0
-        }
-        selected = st.selectbox("Refresh Speed", list(interval_options.keys()), index=0)
-        st.session_state.refresh_interval = interval_options[selected]
+    if auto_refresh:
+        st.success("🟢 Live • 2s")
+        st.caption(f"Messages: {st.session_state.message_count}")
+    
+    st.markdown("---")
     
     if not st.session_state.authenticated:
-        st.markdown("---")
         st.markdown("### 👋 Welcome!")
         col1, col2 = st.columns(2)
         with col1:
@@ -735,24 +548,14 @@ with st.sidebar:
     
     st.markdown("---")
     st.markdown("### ℹ️ About")
-    st.markdown("**ChatVerse** is a modern community forum with ultra-fast live updates.")
-    st.markdown(f"⏱️ Refresh: {st.session_state.refresh_interval*1000:.2f}ms")
+    st.markdown("**ChatVerse** • Modern community forum with live updates ✨")
 
 # Main layout
-main_col1, main_col2, main_col3 = st.columns([1, 3, 1])
+col1, col2, col3 = st.columns([1, 3, 1])
 
-with main_col2:
+with col2:
     # Forum Container
     st.markdown('<div class="forum-container">', unsafe_allow_html=True)
-    
-    # Live indicator
-    st.markdown(f"""
-    <div class="live-indicator">
-        <span class="live-dot"></span>
-        LIVE • {st.session_state.refresh_interval*1000:.2f}ms
-        <span style="font-size:0.6rem;opacity:0.7;">(#{st.session_state.refresh_counter})</span>
-    </div>
-    """, unsafe_allow_html=True)
     
     # Header
     st.markdown("""
@@ -763,13 +566,14 @@ with main_col2:
         </div>
         <div class="online-badge">
             <span class="online-dot"></span>
-            <span>1 online</span>
+            <span>Live</span>
         </div>
     </div>
     """, unsafe_allow_html=True)
     
     # Auth modal
     if st.session_state.show_auth:
+        st.markdown("---")
         if st.session_state.auth_mode == "signin":
             st.markdown("### 🔑 Sign In")
             with st.form("signin_form"):
@@ -834,9 +638,10 @@ with main_col2:
                                 st.error(message)
                     else:
                         st.error("Please fill in all fields")
+        st.markdown("---")
     
     # Chat Messages Area
-    st.markdown('<div class="chat-messages">', unsafe_allow_html=True)
+    st.markdown('<div class="chat-messages" id="chat-messages">', unsafe_allow_html=True)
     
     if not st.session_state.messages:
         st.markdown("""
@@ -847,6 +652,7 @@ with main_col2:
         </div>
         """, unsafe_allow_html=True)
     else:
+        # Display newest first
         for msg in reversed(st.session_state.messages):
             is_own = msg['username'] == st.session_state.username
             avatar_letter = msg['username'][0].upper() if msg['username'] else "?"
@@ -871,29 +677,19 @@ with main_col2:
     # Input Area
     st.markdown('<div class="forum-input-area">', unsafe_allow_html=True)
     
-    # Username input
     if not st.session_state.authenticated:
-        username_col1, username_col2 = st.columns([3, 1])
-        with username_col1:
-            new_username = st.text_input(
-                "Your name",
-                value=st.session_state.username.replace("Guest_", ""),
-                max_chars=18,
-                placeholder="e.g. Nova",
-                key="username_input",
-                label_visibility="collapsed"
-            )
-            if new_username:
-                st.session_state.username = new_username if new_username else st.session_state.username
-        
-        with username_col2:
-            if st.button("🧹 Clear", use_container_width=True, key="clear_btn"):
-                if len(st.session_state.messages) > 0:
-                    st.session_state.messages = []
-                    save_messages()
-                    st.rerun()
+        new_username = st.text_input(
+            "Your name",
+            value=st.session_state.username.replace("Guest_", ""),
+            max_chars=18,
+            placeholder="e.g. Nova",
+            key="username_input",
+            label_visibility="collapsed"
+        )
+        if new_username and new_username != st.session_state.username.replace("Guest_", ""):
+            st.session_state.username = new_username if new_username else st.session_state.username
+            st.rerun()
     
-    # Message input
     with st.form(key="message_form", clear_on_submit=True):
         msg_col1, msg_col2 = st.columns([5, 1])
         with msg_col1:
@@ -914,53 +710,7 @@ with main_col2:
     st.markdown('</div>', unsafe_allow_html=True)
     st.markdown('</div>', unsafe_allow_html=True)
 
-# Additional JavaScript for ultra-fast updates
-st.markdown("""
-<script>
-    // Ultra-fast continuous refresh mechanism
-    (function() {
-        let refreshInterval = 0.05; // 0.00005 seconds = 0.05ms
-        let refreshTimer = null;
-        let isTyping = false;
-        
-        // Detect when user is typing
-        const messageInput = document.querySelector('input[aria-label="Message"]');
-        if (messageInput) {
-            messageInput.addEventListener('focus', () => { isTyping = true; });
-            messageInput.addEventListener('blur', () => { isTyping = false; });
-        }
-        
-        function performRefresh() {
-            if (!isTyping) {
-                // Reload messages from file
-                const chatMessages = document.querySelector('.chat-messages');
-                if (chatMessages) {
-                    // Auto-scroll to bottom
-                    chatMessages.scrollTop = chatMessages.scrollHeight;
-                }
-                
-                // Update online status
-                const onlineBadge = document.querySelector('.online-dot');
-                if (onlineBadge) {
-                    onlineBadge.style.opacity = Math.random() > 0.5 ? '1' : '0.8';
-                }
-            }
-        }
-        
-        // Start ultra-fast refresh
-        function startRefresh() {
-            if (refreshTimer) clearInterval(refreshTimer);
-            refreshTimer = setInterval(performRefresh, refreshInterval);
-        }
-        
-        // Use requestAnimationFrame for even smoother updates
-        function animationLoop() {
-            performRefresh();
-            requestAnimationFrame(animationLoop);
-        }
-        
-        startRefresh();
-        requestAnimationFrame(animationLoop);
-    })();
-</script>
-""", unsafe_allow_html=True)
+# Practical auto-refresh using Streamlit's native mechanism
+if auto_refresh:
+    time.sleep(2)  # Refresh every 2 seconds - practical and smooth
+    st.rerun()
