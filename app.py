@@ -8,7 +8,7 @@ from datetime import datetime
 import uuid
 import base64
 from PIL import Image
-import io
+import time  # Make sure time is imported
 
 # Page config MUST be first
 st.set_page_config(
@@ -174,8 +174,8 @@ if 'initialized' not in st.session_state:
 
 # Load wallpaper from profile if authenticated
 if st.session_state.authenticated:
-    profile = get_user_profile(st.session_state.username)
-    st.session_state.wallpaper = profile.get("wallpaper", DEFAULT_WALLPAPER)
+    profile_data = get_user_profile(st.session_state.username)
+    st.session_state.wallpaper = profile_data.get("wallpaper", DEFAULT_WALLPAPER)
 
 wallpaper_url = WALLPAPERS.get(st.session_state.wallpaper, WALLPAPERS[DEFAULT_WALLPAPER])
 
@@ -222,9 +222,15 @@ st.markdown(f"""
         z-index: 0;
     }}
     
-    /* Hide Streamlit sidebar completely - we'll make our own */
+    /* Hide Streamlit sidebar completely */
     [data-testid="stSidebar"] {{
         display: none !important;
+    }}
+    
+    /* Hide Streamlit's default block container */
+    .block-container {{
+        padding: 0 !important;
+        max-width: 100% !important;
     }}
     
     /* Main content area */
@@ -235,19 +241,34 @@ st.markdown(f"""
         right: 0;
         bottom: 0;
         display: flex;
-        z-index: 1;
+        z-index: 10;
     }}
     
     /* Custom Sidebar */
     .custom-sidebar {{
         width: 280px;
-        background: rgba(15, 23, 42, 0.9);
+        background: rgba(15, 23, 42, 0.95);
         backdrop-filter: blur(20px);
         border-right: 1px solid rgba(255, 255, 255, 0.1);
         display: flex;
         flex-direction: column;
         overflow-y: auto;
         box-shadow: 2px 0 20px rgba(0,0,0,0.2);
+        z-index: 20;
+    }}
+    
+    /* Custom scrollbar for sidebar */
+    .custom-sidebar::-webkit-scrollbar {{
+        width: 4px;
+    }}
+    
+    .custom-sidebar::-webkit-scrollbar-track {{
+        background: rgba(255, 255, 255, 0.05);
+    }}
+    
+    .custom-sidebar::-webkit-scrollbar-thumb {{
+        background: linear-gradient(135deg, #667eea, #764ba2);
+        border-radius: 2px;
     }}
     
     /* Chat Area */
@@ -257,6 +278,7 @@ st.markdown(f"""
         flex-direction: column;
         height: 100vh;
         overflow: hidden;
+        z-index: 10;
     }}
     
     /* Chat Container - Glass Box */
@@ -335,7 +357,7 @@ st.markdown(f"""
         gap: 0.8rem;
     }}
     
-    /* Custom scrollbar */
+    /* Custom scrollbar for messages */
     .messages-container::-webkit-scrollbar {{
         width: 6px;
     }}
@@ -429,20 +451,20 @@ st.markdown(f"""
     /* Sidebar Elements */
     .sidebar-logo {{
         text-align: center;
-        padding: 2rem 1rem;
+        padding: 1.5rem 1rem;
         border-bottom: 1px solid rgba(255, 255, 255, 0.1);
     }}
     
     .logo-animated {{
-        width: 70px;
-        height: 70px;
+        width: 65px;
+        height: 65px;
         margin: 0 auto;
         background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        border-radius: 18px;
+        border-radius: 16px;
         display: flex;
         align-items: center;
         justify-content: center;
-        font-size: 2.5rem;
+        font-size: 2.2rem;
         animation: float 3s ease-in-out infinite;
         box-shadow: 0 10px 30px rgba(102, 126, 234, 0.4);
         position: relative;
@@ -472,18 +494,18 @@ st.markdown(f"""
     }}
     
     .logo-text {{
-        font-size: 1.4rem;
+        font-size: 1.3rem;
         font-weight: 800;
         background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
-        margin-top: 0.75rem;
+        margin-top: 0.5rem;
     }}
     
     .logo-subtitle {{
-        font-size: 0.7rem;
+        font-size: 0.65rem;
         color: #94a3b8;
-        margin-top: 0.25rem;
+        margin-top: 0.2rem;
     }}
     
     .sidebar-section {{
@@ -492,7 +514,7 @@ st.markdown(f"""
     }}
     
     .sidebar-title {{
-        font-size: 0.75rem;
+        font-size: 0.7rem;
         font-weight: 600;
         color: #94a3b8;
         text-transform: uppercase;
@@ -506,14 +528,14 @@ st.markdown(f"""
     }}
     
     .username-display {{
-        font-size: 1rem;
+        font-size: 0.95rem;
         font-weight: 600;
         color: #f1f5f9;
         margin-top: 0.5rem;
     }}
     
     .bio-preview {{
-        font-size: 0.75rem;
+        font-size: 0.7rem;
         color: #94a3b8;
         margin-top: 0.25rem;
     }}
@@ -552,6 +574,10 @@ st.markdown(f"""
     .stSelectbox > div > div {{
         background: rgba(255, 255, 255, 0.95) !important;
         border-radius: 0.8rem !important;
+    }}
+    
+    .stForm {{
+        background: transparent !important;
     }}
     
     /* Responsive */
@@ -601,8 +627,8 @@ def sign_in(username, password):
         if u.lower() == username.lower() and pwd == hash_password(password):
             st.session_state.authenticated = True
             st.session_state.username = u
-            profile = get_user_profile(u)
-            st.session_state.wallpaper = profile.get("wallpaper", DEFAULT_WALLPAPER)
+            profile_info = get_user_profile(u)
+            st.session_state.wallpaper = profile_info.get("wallpaper", DEFAULT_WALLPAPER)
             return True, f"Welcome back, {u}!"
     return False, "Invalid username or password"
 
@@ -635,8 +661,8 @@ def send_message(text):
 if not st.session_state.authenticated:
     # AUTH PAGE
     st.markdown("""
-    <div style="position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 100%; max-width: 450px; z-index: 10;">
-        <div style="background: rgba(30, 41, 59, 0.9); backdrop-filter: blur(20px); border-radius: 1.5rem; padding: 2rem; border: 1px solid rgba(255, 255, 255, 0.1); box-shadow: 0 20px 50px rgba(0,0,0,0.3);">
+    <div style="position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 100%; max-width: 450px; z-index: 100;">
+        <div style="background: rgba(30, 41, 59, 0.95); backdrop-filter: blur(20px); border-radius: 1.5rem; padding: 2rem; border: 1px solid rgba(255, 255, 255, 0.1); box-shadow: 0 20px 50px rgba(0,0,0,0.3);">
             <div style="text-align:center; margin-bottom:2rem;">
                 <div style="width:70px;height:70px;margin:0 auto;background:linear-gradient(135deg,#667eea,#764ba2);border-radius:18px;display:flex;align-items:center;justify-content:center;font-size:2.5rem;margin-bottom:1rem;animation:float 3s ease-in-out infinite;">
                     💬
@@ -685,11 +711,11 @@ if not st.session_state.authenticated:
 
 elif st.session_state.get('show_profile', False):
     # PROFILE PAGE
-    profile = get_user_profile(st.session_state.username)
+    profile_info = get_user_profile(st.session_state.username)
     wp_list = list(WALLPAPERS.keys())
     
     st.markdown("""
-    <div style="position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 90%; max-width: 650px; max-height: 90vh; overflow-y: auto; z-index: 10;">
+    <div style="position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 90%; max-width: 650px; max-height: 90vh; overflow-y: auto; z-index: 100;">
         <div style="background: rgba(30, 41, 59, 0.95); backdrop-filter: blur(20px); border-radius: 1.5rem; padding: 2rem; border: 1px solid rgba(255, 255, 255, 0.1);">
     """, unsafe_allow_html=True)
     
@@ -706,11 +732,11 @@ elif st.session_state.get('show_profile', False):
     
     with col2:
         with st.form("profile_form"):
-            bio = st.text_area("About Me", value=profile.get("bio", ""), max_chars=200, 
+            bio = st.text_area("About Me", value=profile_info.get("bio", ""), max_chars=200, 
                              placeholder="Tell the community about yourself...", height=100)
             
             try:
-                wp_idx = wp_list.index(profile.get("wallpaper", DEFAULT_WALLPAPER))
+                wp_idx = wp_list.index(profile_info.get("wallpaper", DEFAULT_WALLPAPER))
             except:
                 wp_idx = 0
             
@@ -750,6 +776,9 @@ else:
                       (datetime.now() - datetime.fromisoformat(m.get("timestamp", datetime.now().isoformat()))).seconds < 3600]
         online_count = max(1, len(set(m["username"] for m in recent_msgs)))
     
+    # Get current user profile for bio display
+    current_profile = get_user_profile(st.session_state.username)
+    
     # Create main layout with HTML/CSS
     st.markdown(f"""
     <div class="main-content">
@@ -766,14 +795,11 @@ else:
             <div class="user-info">
                 {get_avatar_html(st.session_state.username, 60)}
                 <div class="username-display">@{st.session_state.username}</div>
-                <div class="bio-preview">{sanitize_html(profile.get("bio", "No bio yet"))[:50]}</div>
+                <div class="bio-preview">{sanitize_html(current_profile.get("bio", "No bio yet"))[:50]}</div>
             </div>
-            
-            <div class="sidebar-section">
-                <div class="sidebar-title">⚡ Actions</div>
     """, unsafe_allow_html=True)
     
-    # Buttons in sidebar using columns
+    # Buttons in sidebar
     col1, col2 = st.columns(2)
     with col1:
         if st.button("✏️ Edit Profile", key="edit_profile_btn", use_container_width=True):
@@ -784,8 +810,6 @@ else:
             sign_out()
     
     st.markdown(f"""
-            </div>
-            
             <div class="sidebar-section">
                 <div class="sidebar-title">🎨 Theme Gallery</div>
     """, unsafe_allow_html=True)
