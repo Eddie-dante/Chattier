@@ -12,9 +12,9 @@ import base64
 from PIL import Image
 import io
 
-# Page config
+# Page config MUST be first
 st.set_page_config(
-    page_title="ChatVerse • Community Forum",
+    page_title="Chattier • Community Forum",
     page_icon="💬",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -29,15 +29,21 @@ PROFILES_FILE = DATA_DIR / "profiles.json"
 UPLOADS_DIR = DATA_DIR / "uploads"
 UPLOADS_DIR.mkdir(exist_ok=True)
 
-# Beautiful wallpaper collection
+# Premium wallpaper collection
 WALLPAPERS = {
+    "✨ Abstract Purple": "https://images.unsplash.com/photo-1557682250-33bd709cbe85?w=1920&q=80",
     "🌌 Cosmic Nebula": "https://images.unsplash.com/photo-1534796636912-3b95b3ab5986?w=1920&q=80",
     "🌊 Ocean Waves": "https://images.unsplash.com/photo-1505118380757-91f5f5632de0?w=1920&q=80",
     "🏔️ Mountain Stars": "https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=1920&q=80",
     "🌸 Cherry Blossom": "https://images.unsplash.com/photo-1522383225653-ed111181a951?w=1920&q=80",
-    "🌅 Sunset Clouds": "https://images.unsplash.com/photo-1534274988757-a28bf1a57c17?w=1920&q=80",
-    "✨ Abstract Purple": "https://images.unsplash.com/photo-1557682250-33bd709cbe85?w=1920&q=80",
+    "🌅 Golden Sunset": "https://images.unsplash.com/photo-1534274988757-a28bf1a57c17?w=1920&q=80",
+    "🌿 Forest Mist": "https://images.unsplash.com/photo-1470071459604-3b5ec3a7fe05?w=1920&q=80",
+    "🏙️ City Lights": "https://images.unsplash.com/photo-1477959858617-67f85cf4f1df?w=1920&q=80",
+    "🌌 Starry Night": "https://images.unsplash.com/photo-1419242902214-272b3f66ee7a?w=1920&q=80",
+    "🔥 Lava Abstract": "https://images.unsplash.com/photo-1550745165-9bc0b252726f?w=1920&q=80",
 }
+
+DEFAULT_WALLPAPER = "✨ Abstract Purple"
 
 # Helper functions
 def hash_password(password):
@@ -59,17 +65,15 @@ def save_json(path, data):
     try:
         with open(path, 'w', encoding='utf-8') as f:
             json.dump(data, f, indent=2, ensure_ascii=False)
-    except Exception as e:
-        st.error(f"Save error: {e}")
+    except:
+        pass
 
-# User management
 def load_users():
     return load_json(USERS_FILE, {})
 
 def save_users(users):
     save_json(USERS_FILE, users)
 
-# Profile management
 def load_profiles():
     return load_json(PROFILES_FILE, {})
 
@@ -78,7 +82,7 @@ def save_profiles(profiles):
 
 def get_user_profile(username):
     profiles = load_profiles()
-    return profiles.get(username, {"bio": "", "avatar": None, "wallpaper": "🌌 Cosmic Nebula"})
+    return profiles.get(username, {"bio": "", "avatar": None, "wallpaper": DEFAULT_WALLPAPER})
 
 def update_profile(username, bio, avatar_file, wallpaper):
     profiles = load_profiles()
@@ -86,19 +90,23 @@ def update_profile(username, bio, avatar_file, wallpaper):
         profiles[username] = {}
     
     profiles[username]["bio"] = sanitize_html(bio) if bio else ""
-    profiles[username]["wallpaper"] = wallpaper
     
-    if avatar_file:
+    if wallpaper and wallpaper in WALLPAPERS:
+        profiles[username]["wallpaper"] = wallpaper
+    
+    if avatar_file is not None:
         try:
             image = Image.open(avatar_file)
+            image = image.convert("RGB")
             image = image.resize((200, 200), Image.Resampling.LANCZOS)
-            avatar_path = UPLOADS_DIR / f"{username}_avatar.png"
-            image.save(avatar_path, "PNG")
+            avatar_path = UPLOADS_DIR / f"{username}_avatar.jpg"
+            image.save(avatar_path, "JPEG", quality=85)
             profiles[username]["avatar"] = str(avatar_path)
         except Exception as e:
-            st.error(f"Avatar error: {e}")
+            st.error(f"Could not process image: {e}")
     
     save_profiles(profiles)
+    return True
 
 def get_avatar_html(username, size=40):
     profiles = load_profiles()
@@ -106,15 +114,17 @@ def get_avatar_html(username, size=40):
     avatar_path = profile.get("avatar")
     
     if avatar_path and os.path.exists(avatar_path):
-        with open(avatar_path, "rb") as f:
-            avatar_bytes = f.read()
-        avatar_b64 = base64.b64encode(avatar_bytes).decode()
-        return f'<img src="data:image/png;base64,{avatar_b64}" style="width:{size}px;height:{size}px;border-radius:50%;object-fit:cover;" />'
-    else:
-        letter = username[0].upper() if username else "?"
-        return f'<div style="width:{size}px;height:{size}px;border-radius:50%;background:linear-gradient(135deg,#7c3aed,#a78bfa);display:flex;align-items:center;justify-content:center;font-weight:bold;color:white;font-size:{size*0.4}px;">{letter}</div>'
+        try:
+            with open(avatar_path, "rb") as f:
+                avatar_bytes = f.read()
+            avatar_b64 = base64.b64encode(avatar_bytes).decode()
+            return f'<div style="width:{size}px;height:{size}px;border-radius:50%;overflow:hidden;flex-shrink:0;"><img src="data:image/jpeg;base64,{avatar_b64}" style="width:100%;height:100%;object-fit:cover;" /></div>'
+        except:
+            pass
+    
+    letter = username[0].upper() if username else "?"
+    return f'<div style="width:{size}px;height:{size}px;border-radius:50%;background:linear-gradient(135deg,#7c3aed,#a78bfa);display:flex;align-items:center;justify-content:center;font-weight:700;color:white;font-size:{size*0.4}px;flex-shrink:0;">{letter}</div>'
 
-# Messages management
 def load_messages():
     return load_json(MESSAGES_FILE, [])
 
@@ -134,34 +144,30 @@ def format_time(ts):
             return f"{diff.seconds // 3600}h ago"
         elif diff.days == 1:
             return "Yesterday"
-        return t.strftime("%b %d, %H:%M")
+        return t.strftime("%b %d")
     except:
         return ""
 
 # Initialize session state
-if 'messages' not in st.session_state:
+if 'initialized' not in st.session_state:
     st.session_state.messages = load_messages()
-if 'authenticated' not in st.session_state:
     st.session_state.authenticated = False
     st.session_state.username = ""
-if 'show_profile' not in st.session_state:
     st.session_state.show_profile = False
-if 'wallpaper' not in st.session_state:
-    st.session_state.wallpaper = "🌌 Cosmic Nebula"
-if 'last_message_count' not in st.session_state:
-    st.session_state.last_message_count = len(st.session_state.messages)
+    st.session_state.wallpaper = DEFAULT_WALLPAPER
+    st.session_state.initialized = True
 
-# Load user's wallpaper preference
+# Load wallpaper from profile if authenticated
 if st.session_state.authenticated:
     profile = get_user_profile(st.session_state.username)
-    st.session_state.wallpaper = profile.get("wallpaper", "🌌 Cosmic Nebula")
+    st.session_state.wallpaper = profile.get("wallpaper", DEFAULT_WALLPAPER)
 
-wallpaper_url = WALLPAPERS.get(st.session_state.wallpaper, list(WALLPAPERS.values())[0])
+wallpaper_url = WALLPAPERS.get(st.session_state.wallpaper, WALLPAPERS[DEFAULT_WALLPAPER])
 
-# Custom CSS
+# Premium CSS
 st.markdown(f"""
 <style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
     
     * {{ font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }}
     
@@ -183,239 +189,332 @@ st.markdown(f"""
         left: 0;
         width: 100%;
         height: 100%;
-        background: rgba(15, 23, 42, 0.78);
-        backdrop-filter: blur(8px);
+        background: rgba(15, 23, 42, 0.75);
+        backdrop-filter: blur(6px);
         z-index: -1;
     }}
     
-    .chat-wrapper {{
-        max-width: 850px;
-        margin: 1rem auto;
-        height: 90vh;
-        display: flex;
-        flex-direction: column;
-        background: rgba(30, 41, 59, 0.6);
-        backdrop-filter: blur(20px);
-        border-radius: 2rem;
-        border: 1px solid rgba(255, 255, 255, 0.12);
-        box-shadow: 0 25px 60px rgba(0,0,0,0.5);
-        overflow: hidden;
+    .block-container {{
+        padding: 1rem !important;
+        max-width: 100% !important;
     }}
     
-    .chat-header {{
-        padding: 1rem 1.5rem;
-        border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    /* Chattier branding */
+    .brand-logo {{
         display: flex;
-        justify-content: space-between;
         align-items: center;
-        background: rgba(0,0,0,0.25);
-        flex-shrink: 0;
+        gap: 0.6rem;
     }}
     
-    .logo {{
+    .brand-icon {{
+        width: 42px;
+        height: 42px;
+        background: linear-gradient(135deg, #7c3aed, #c084fc);
+        border-radius: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.4rem;
+        box-shadow: 0 4px 15px rgba(124, 58, 237, 0.5);
+    }}
+    
+    .brand-name {{
         font-size: 1.5rem;
-        font-weight: 700;
-        background: linear-gradient(135deg, #c084fc, #a78bfa);
+        font-weight: 800;
+        letter-spacing: -0.5px;
+        background: linear-gradient(135deg, #c084fc, #e9d5ff);
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
     }}
     
-    .online-badge {{
-        background: rgba(255,255,255,0.08);
-        padding: 0.35rem 1rem;
-        border-radius: 2rem;
-        font-size: 0.8rem;
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
-        color: #e2e8f0;
-        border: 1px solid rgba(255,255,255,0.1);
-    }}
-    
-    .online-dot {{
-        width: 8px;
-        height: 8px;
-        background: #10b981;
-        border-radius: 50%;
-        animation: pulse 1.5s infinite;
-        display: inline-block;
-    }}
-    
-    @keyframes pulse {{
-        0%, 100% {{ opacity: 1; box-shadow: 0 0 6px #10b981; }}
-        50% {{ opacity: 0.4; box-shadow: 0 0 2px #10b981; }}
-    }}
-    
-    .messages-container {{
-        flex: 1;
-        overflow-y: auto;
-        padding: 1.2rem;
+    /* Chat container */
+    .chat-container {{
+        max-width: 800px;
+        margin: 0 auto;
+        height: 88vh;
         display: flex;
         flex-direction: column;
-        gap: 0.8rem;
-        min-height: 0;
-    }}
-    
-    .message-row {{
-        display: flex;
-        gap: 0.7rem;
-        animation: slideIn 0.3s ease;
-        align-items: flex-start;
-        width: 100%;
-    }}
-    
-    .message-row.own {{
-        flex-direction: row-reverse;
-    }}
-    
-    @keyframes slideIn {{
-        from {{ opacity: 0; transform: translateY(8px); }}
-        to {{ opacity: 1; transform: translateY(0); }}
-    }}
-    
-    .msg-avatar {{
-        flex-shrink: 0;
-        width: 40px;
-        height: 40px;
-        border-radius: 50%;
+        background: rgba(30, 41, 59, 0.55);
+        backdrop-filter: blur(20px);
+        border-radius: 1.5rem;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        box-shadow: 0 20px 50px rgba(0,0,0,0.4);
         overflow: hidden;
     }}
     
-    .msg-bubble {{
-        max-width: 62%;
-        background: rgba(255, 255, 255, 0.1);
-        backdrop-filter: blur(10px);
-        padding: 0.65rem 1rem;
-        border-radius: 1rem 1rem 1rem 0.2rem;
-        border: 1px solid rgba(255, 255, 255, 0.12);
+    .chat-header {{
+        padding: 0.9rem 1.5rem;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        background: rgba(0,0,0,0.2);
+        flex-shrink: 0;
     }}
     
-    .message-row.own .msg-bubble {{
-        background: rgba(59, 130, 246, 0.28);
-        border-color: rgba(59, 130, 246, 0.35);
-        border-radius: 1rem 1rem 0.2rem 1rem;
-    }}
-    
-    .msg-name {{
+    .status-badge {{
+        background: rgba(255,255,255,0.06);
+        padding: 0.3rem 0.9rem;
+        border-radius: 1.5rem;
         font-size: 0.75rem;
-        font-weight: 600;
-        color: #cbd5e1;
-        margin-bottom: 0.2rem;
         display: flex;
         align-items: center;
         gap: 0.4rem;
+        color: #cbd5e1;
+        border: 1px solid rgba(255,255,255,0.08);
     }}
     
-    .message-row.own .msg-name {{
+    .status-dot {{
+        width: 7px;
+        height: 7px;
+        background: #10b981;
+        border-radius: 50%;
+        animation: statusPulse 2s infinite;
+    }}
+    
+    @keyframes statusPulse {{
+        0%, 100% {{ opacity: 1; box-shadow: 0 0 4px #10b981; }}
+        50% {{ opacity: 0.4; box-shadow: 0 0 1px #10b981; }}
+    }}
+    
+    /* Messages */
+    .messages-area {{
+        flex: 1;
+        overflow-y: auto;
+        padding: 1rem 1.2rem;
+        display: flex;
+        flex-direction: column;
+        gap: 0.7rem;
+        min-height: 0;
+    }}
+    
+    .msg-row {{
+        display: flex;
+        gap: 0.6rem;
+        animation: msgIn 0.25s ease;
+        align-items: flex-start;
+    }}
+    
+    .msg-row.own {{
+        flex-direction: row-reverse;
+    }}
+    
+    @keyframes msgIn {{
+        from {{ opacity: 0; transform: translateY(6px); }}
+        to {{ opacity: 1; transform: translateY(0); }}
+    }}
+    
+    .msg-bubble {{
+        max-width: 60%;
+        background: rgba(255, 255, 255, 0.08);
+        backdrop-filter: blur(8px);
+        padding: 0.55rem 0.9rem;
+        border-radius: 0.9rem 0.9rem 0.9rem 0.2rem;
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        word-wrap: break-word;
+    }}
+    
+    .msg-row.own .msg-bubble {{
+        background: rgba(124, 58, 237, 0.25);
+        border-color: rgba(124, 58, 237, 0.3);
+        border-radius: 0.9rem 0.9rem 0.2rem 0.9rem;
+    }}
+    
+    .msg-author {{
+        font-size: 0.7rem;
+        font-weight: 600;
+        color: #cbd5e1;
+        margin-bottom: 0.15rem;
+        display: flex;
+        align-items: center;
+        gap: 0.35rem;
+    }}
+    
+    .msg-row.own .msg-author {{
         justify-content: flex-end;
-        color: #93c5fd;
+        color: #c4b5fd;
     }}
     
     .msg-time {{
-        font-size: 0.65rem;
+        font-size: 0.6rem;
         color: #94a3b8;
         font-weight: 400;
     }}
     
     .msg-text {{
         color: #f1f5f9;
-        word-wrap: break-word;
-        font-size: 0.9rem;
-        line-height: 1.45;
+        font-size: 0.88rem;
+        line-height: 1.4;
     }}
     
-    .empty-chat {{
+    .empty-state {{
         text-align: center;
         color: #94a3b8;
-        padding: 3rem 2rem;
+        padding: 2rem;
         margin: auto;
     }}
     
-    .input-area {{
-        padding: 0.9rem 1.5rem;
-        background: rgba(0,0,0,0.35);
-        border-top: 1px solid rgba(255, 255, 255, 0.08);
+    /* Input */
+    .input-section {{
+        padding: 0.8rem 1.2rem;
+        background: rgba(0,0,0,0.25);
+        border-top: 1px solid rgba(255, 255, 255, 0.06);
         flex-shrink: 0;
     }}
     
-    .user-info {{
+    .user-tag {{
         display: flex;
         justify-content: space-between;
         align-items: center;
-        margin-bottom: 0.5rem;
+        margin-bottom: 0.4rem;
         color: #a5b4fc;
-        font-size: 0.85rem;
+        font-size: 0.8rem;
         font-weight: 500;
     }}
     
+    /* Input fields */
     .stTextInput > div > div > input {{
-        background: rgba(255, 255, 255, 0.13) !important;
-        border: 1px solid rgba(255, 255, 255, 0.22) !important;
-        padding: 0.7rem 1.1rem !important;
-        border-radius: 2rem !important;
+        background: rgba(255, 255, 255, 0.1) !important;
+        border: 1px solid rgba(255, 255, 255, 0.18) !important;
+        padding: 0.6rem 1rem !important;
+        border-radius: 1.5rem !important;
         color: #ffffff !important;
-        font-size: 0.9rem !important;
+        font-size: 0.88rem !important;
         caret-color: #c084fc !important;
+        height: auto !important;
     }}
     
     .stTextInput > div > div > input::placeholder {{
-        color: rgba(255, 255, 255, 0.45) !important;
+        color: rgba(255, 255, 255, 0.4) !important;
     }}
     
     .stTextInput > div > div > input:focus {{
-        border-color: #c084fc !important;
-        box-shadow: 0 0 18px rgba(192, 132, 252, 0.3) !important;
-        background: rgba(255, 255, 255, 0.18) !important;
+        border-color: #a78bfa !important;
+        box-shadow: 0 0 12px rgba(167, 139, 250, 0.25) !important;
+        background: rgba(255, 255, 255, 0.15) !important;
     }}
     
+    /* Text area */
+    .stTextArea textarea {{
+        background: rgba(255, 255, 255, 0.1) !important;
+        border: 1px solid rgba(255, 255, 255, 0.18) !important;
+        border-radius: 1rem !important;
+        color: #ffffff !important;
+        font-size: 0.88rem !important;
+    }}
+    
+    .stTextArea textarea:focus {{
+        border-color: #a78bfa !important;
+        box-shadow: 0 0 12px rgba(167, 139, 250, 0.25) !important;
+    }}
+    
+    /* Buttons */
     .stButton > button {{
-        background: linear-gradient(135deg, #7c3aed, #a855f7) !important;
+        background: linear-gradient(135deg, #7c3aed, #8b5cf6) !important;
         border: none !important;
-        padding: 0.5rem 1.2rem !important;
-        border-radius: 2rem !important;
+        padding: 0.5rem 1rem !important;
+        border-radius: 1.5rem !important;
         color: white !important;
         font-weight: 600 !important;
+        font-size: 0.85rem !important;
         transition: all 0.2s !important;
-        border: 1px solid rgba(255, 255, 255, 0.2) !important;
+        border: 1px solid rgba(255, 255, 255, 0.15) !important;
+        height: auto !important;
+        min-height: 38px !important;
     }}
     
     .stButton > button:hover {{
-        transform: scale(1.04) !important;
-        box-shadow: 0 8px 25px rgba(124, 58, 237, 0.45) !important;
+        transform: translateY(-1px) !important;
+        box-shadow: 0 6px 20px rgba(124, 58, 237, 0.4) !important;
+        background: linear-gradient(135deg, #8b5cf6, #a78bfa) !important;
     }}
     
+    /* Tabs */
     .stTabs [data-baseweb="tab-list"] {{
-        gap: 0.8rem;
+        gap: 0.5rem;
         background: transparent;
     }}
     
     .stTabs [data-baseweb="tab"] {{
-        background: rgba(255, 255, 255, 0.06);
-        border-radius: 1rem;
+        background: rgba(255, 255, 255, 0.05);
+        border-radius: 0.8rem;
         color: #cbd5e1 !important;
-        padding: 0.6rem 1rem;
+        padding: 0.5rem 1rem;
+        font-weight: 500;
+        font-size: 0.85rem;
     }}
     
     .stTabs [aria-selected="true"] {{
-        background: linear-gradient(135deg, #7c3aed, #a855f7) !important;
+        background: linear-gradient(135deg, #7c3aed, #8b5cf6) !important;
         color: white !important;
     }}
     
-    ::-webkit-scrollbar {{ width: 5px; }}
-    ::-webkit-scrollbar-track {{ background: rgba(0,0,0,0.2); }}
-    ::-webkit-scrollbar-thumb {{ background: rgba(124, 58, 237, 0.5); border-radius: 10px; }}
+    /* Sidebar */
+    .css-1d391kg {{
+        background: rgba(15, 23, 42, 0.85) !important;
+        backdrop-filter: blur(15px) !important;
+    }}
     
-    .stForm {{ border: none !important; }}
-    label {{ color: #cbd5e1 !important; }}
+    /* Scrollbar */
+    ::-webkit-scrollbar {{ width: 4px; }}
+    ::-webkit-scrollbar-track {{ background: transparent; }}
+    ::-webkit-scrollbar-thumb {{ background: rgba(124, 58, 237, 0.4); border-radius: 4px; }}
     
-    .profile-container {{
-        max-width: 600px;
+    /* Forms */
+    .stForm {{ border: none !important; padding: 0 !important; }}
+    
+    /* Auth card */
+    .auth-card {{
+        max-width: 440px;
         margin: 2rem auto;
-        background: rgba(30, 41, 59, 0.7);
+        background: rgba(30, 41, 59, 0.6);
         backdrop-filter: blur(20px);
-        border-radius: 2rem;
+        border-radius: 1.5rem;
         padding: 2rem;
-        border: 1px solid rgba(255,255,255,0.12);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        box-shadow: 0 20px 50px rgba(0,0,0,0.4);
+    }}
+    
+    /* Profile card */
+    .profile-card {{
+        max-width: 600px;
+        margin: 1rem auto;
+        background: rgba(30, 41, 59, 0.6);
+        backdrop-filter: blur(20px);
+        border-radius: 1.5rem;
+        padding: 2rem;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        box-shadow: 0 20px 50px rgba(0,0,0,0.4);
+    }}
+    
+    /* File uploader */
+    .stFileUploader > div {{
+        background: rgba(255, 255, 255, 0.05) !important;
+        border: 1px dashed rgba(255, 255, 255, 0.2) !important;
+        border-radius: 0.8rem !important;
+        padding: 0.5rem !important;
+    }}
+    
+    /* Select box */
+    .stSelectbox > div > div {{
+        background: rgba(255, 255, 255, 0.08) !important;
+        border: 1px solid rgba(255, 255, 255, 0.15) !important;
+        border-radius: 0.8rem !important;
+        color: white !important;
+    }}
+    
+    /* Responsive */
+    @media (max-width: 768px) {{
+        .chat-container {{
+            height: 92vh;
+            border-radius: 1rem;
+        }}
+        .msg-bubble {{
+            max-width: 75%;
+        }}
+        .block-container {{
+            padding: 0.3rem !important;
+        }}
     }}
 </style>
 """, unsafe_allow_html=True)
@@ -427,38 +526,41 @@ def sign_up(username, password, confirm):
     if password != confirm:
         return False, "Passwords do not match"
     if len(password) < 4:
-        return False, "Password too short (min 4 chars)"
+        return False, "Password must be at least 4 characters"
     if len(username) < 2:
-        return False, "Username too short"
+        return False, "Username must be at least 2 characters"
+    if len(username) > 20:
+        return False, "Username too long (max 20 chars)"
     
     users = load_users()
-    if username in users:
+    if username.lower() in [u.lower() for u in users]:
         return False, "Username already exists"
     
     users[username] = hash_password(password)
     save_users(users)
     
-    # Create default profile
     profiles = load_profiles()
-    profiles[username] = {"bio": "", "avatar": None, "wallpaper": "🌌 Cosmic Nebula"}
+    profiles[username] = {"bio": "", "avatar": None, "wallpaper": DEFAULT_WALLPAPER}
     save_profiles(profiles)
     
-    return True, "Account created! Please sign in."
+    return True, "Account created successfully!"
 
 def sign_in(username, password):
     users = load_users()
-    if username in users and users[username] == hash_password(password):
-        st.session_state.authenticated = True
-        st.session_state.username = username
-        profile = get_user_profile(username)
-        st.session_state.wallpaper = profile.get("wallpaper", "🌌 Cosmic Nebula")
-        return True, f"Welcome back, {username}!"
+    for u, pwd in users.items():
+        if u.lower() == username.lower() and pwd == hash_password(password):
+            st.session_state.authenticated = True
+            st.session_state.username = u
+            profile = get_user_profile(u)
+            st.session_state.wallpaper = profile.get("wallpaper", DEFAULT_WALLPAPER)
+            return True, f"Welcome back, {u}!"
     return False, "Invalid username or password"
 
 def sign_out():
     st.session_state.authenticated = False
     st.session_state.username = ""
     st.session_state.show_profile = False
+    st.session_state.wallpaper = DEFAULT_WALLPAPER
 
 def send_message(text):
     if not text or not text.strip():
@@ -478,34 +580,46 @@ def send_message(text):
     save_messages()
     return True
 
-# Sidebar
+# ============ SIDEBAR ============
 with st.sidebar:
-    st.markdown("## 🎨 ChatVerse")
+    # Brand
+    st.markdown("""
+    <div style="display:flex;align-items:center;gap:0.6rem;margin-bottom:1.5rem;">
+        <div style="width:38px;height:38px;background:linear-gradient(135deg,#7c3aed,#c084fc);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:1.2rem;box-shadow:0 4px 12px rgba(124,58,237,0.4);">💬</div>
+        <span style="font-size:1.4rem;font-weight:800;background:linear-gradient(135deg,#c084fc,#e9d5ff);-webkit-background-clip:text;-webkit-text-fill-color:transparent;">Chattier</span>
+    </div>
+    """, unsafe_allow_html=True)
     
     if not st.session_state.authenticated:
-        st.markdown("### 👋 Welcome!")
-        st.markdown("Sign in to chat and customize your experience")
+        st.markdown("### 👋 Welcome to Chattier")
+        st.caption("Sign in to join the conversation")
         st.markdown("---")
     
-    # Wallpaper selector
-    st.markdown("### 🖼️ Wallpaper")
-    current_wp = st.session_state.get("wallpaper", "🌌 Cosmic Nebula")
+    # Wallpaper
+    st.markdown("### 🎨 Theme")
+    current_wp = st.session_state.get("wallpaper", DEFAULT_WALLPAPER)
     wp_list = list(WALLPAPERS.keys())
     
+    try:
+        current_idx = wp_list.index(current_wp)
+    except:
+        current_idx = 0
+    
     selected_wp = st.selectbox(
-        "Background",
+        "Choose wallpaper",
         wp_list,
-        index=wp_list.index(current_wp) if current_wp in wp_list else 0,
+        index=current_idx,
         label_visibility="collapsed"
     )
     
     if selected_wp != current_wp:
         st.session_state.wallpaper = selected_wp
         if st.session_state.authenticated:
-            profile = get_user_profile(st.session_state.username)
-            profile["wallpaper"] = selected_wp
             profiles = load_profiles()
-            profiles[st.session_state.username] = profile
+            if st.session_state.username in profiles:
+                profiles[st.session_state.username]["wallpaper"] = selected_wp
+            else:
+                profiles[st.session_state.username] = {"bio": "", "avatar": None, "wallpaper": selected_wp}
             save_profiles(profiles)
         st.rerun()
     
@@ -513,59 +627,74 @@ with st.sidebar:
         st.markdown("---")
         st.markdown(f"### 👤 {st.session_state.username}")
         
-        if st.button("✏️ Edit Profile", use_container_width=True):
-            st.session_state.show_profile = True
-            st.rerun()
-        
-        if st.button("🚪 Sign Out", use_container_width=True):
-            sign_out()
-            st.rerun()
+        c1, c2 = st.columns(2)
+        with c1:
+            if st.button("✏️ Profile", use_container_width=True):
+                st.session_state.show_profile = True
+                st.rerun()
+        with c2:
+            if st.button("🚪 Logout", use_container_width=True):
+                sign_out()
+                st.rerun()
     
     st.markdown("---")
-    st.markdown("### 📊 Stats")
-    st.metric("Messages", len(st.session_state.messages))
-    if st.session_state.messages:
-        users = len(set(m["username"] for m in st.session_state.messages))
-        st.metric("Participants", users)
+    st.markdown("### 📊 Activity")
+    c1, c2 = st.columns(2)
+    with c1:
+        st.metric("Messages", len(st.session_state.messages))
+    with c2:
+        if st.session_state.messages:
+            users = len(set(m["username"] for m in st.session_state.messages))
+            st.metric("Users", users)
+        else:
+            st.metric("Users", 0)
+    
+    st.markdown("---")
+    st.caption("© 2024 Chattier • v1.0")
+    st.caption("Made with ❤️")
 
-# Profile page
+# ============ PROFILE PAGE ============
 if st.session_state.show_profile and st.session_state.authenticated:
     profile = get_user_profile(st.session_state.username)
     
-    st.markdown('<div class="profile-container">', unsafe_allow_html=True)
-    st.markdown(f"## ✏️ Edit Profile")
+    st.markdown('<div class="profile-card">', unsafe_allow_html=True)
+    st.markdown("## ✏️ Edit Profile")
     
-    col1, col2 = st.columns([1, 2])
+    c1, c2 = st.columns([1, 2])
     
-    with col1:
-        st.markdown("### Profile Picture")
-        avatar_html = get_avatar_html(st.session_state.username, 150)
-        st.markdown(avatar_html, unsafe_allow_html=True)
-        
-        avatar_file = st.file_uploader("Upload picture", type=['png', 'jpg', 'jpeg'], key="avatar_upload")
+    with c1:
+        st.markdown("#### Avatar")
+        avatar_html = get_avatar_html(st.session_state.username, 140)
+        st.markdown(f'<div style="margin-bottom:1rem;">{avatar_html}</div>', unsafe_allow_html=True)
+        avatar_file = st.file_uploader("Upload image", type=['png', 'jpg', 'jpeg'], 
+                                       key="avatar_upload", label_visibility="collapsed")
+        st.caption("Recommended: 200×200px")
     
-    with col2:
+    with c2:
         with st.form("profile_form"):
             bio = st.text_area("Bio", value=profile.get("bio", ""), max_chars=200, 
-                             placeholder="Tell us about yourself...", height=100)
+                             placeholder="Write something about yourself...", height=100)
             
-            wallpaper_choice = st.selectbox("Default Wallpaper", list(WALLPAPERS.keys()),
-                                          index=list(WALLPAPERS.keys()).index(
-                                              profile.get("wallpaper", "🌌 Cosmic Nebula")))
+            try:
+                wp_idx = wp_list.index(profile.get("wallpaper", DEFAULT_WALLPAPER))
+            except:
+                wp_idx = 0
             
-            col_a, col_b = st.columns(2)
-            with col_a:
+            wallpaper_choice = st.selectbox("Default theme", wp_list, index=wp_idx)
+            
+            ca, cb = st.columns(2)
+            with ca:
                 save_btn = st.form_submit_button("💾 Save", use_container_width=True)
-            with col_b:
+            with cb:
                 cancel_btn = st.form_submit_button("↩️ Back", use_container_width=True)
             
             if save_btn:
-                update_profile(st.session_state.username, bio, avatar_file, wallpaper_choice)
-                st.session_state.wallpaper = wallpaper_choice
-                st.success("Profile updated!")
-                time.sleep(0.5)
-                st.session_state.show_profile = False
-                st.rerun()
+                if update_profile(st.session_state.username, bio, avatar_file, wallpaper_choice):
+                    st.session_state.wallpaper = wallpaper_choice
+                    st.success("Profile updated!")
+                    time.sleep(0.4)
+                    st.session_state.show_profile = False
+                    st.rerun()
             
             if cancel_btn:
                 st.session_state.show_profile = False
@@ -573,21 +702,26 @@ if st.session_state.show_profile and st.session_state.authenticated:
     
     st.markdown('</div>', unsafe_allow_html=True)
 
-# Auth page
+# ============ AUTH PAGE ============
 elif not st.session_state.authenticated:
     st.markdown("""
-    <div style="max-width:500px;margin:3rem auto;background:rgba(30,41,59,0.7);backdrop-filter:blur(20px);border-radius:2rem;padding:2rem;border:1px solid rgba(255,255,255,0.12);">
-        <h1 style="text-align:center;color:white;margin-bottom:0.5rem;">💬 ChatVerse</h1>
-        <p style="text-align:center;color:#94a3b8;margin-bottom:2rem;">Community Forum</p>
+    <div class="auth-card">
+        <div style="text-align:center;margin-bottom:1.5rem;">
+            <div style="display:flex;align-items:center;justify-content:center;gap:0.6rem;margin-bottom:0.5rem;">
+                <div style="width:48px;height:48px;background:linear-gradient(135deg,#7c3aed,#c084fc);border-radius:14px;display:flex;align-items:center;justify-content:center;font-size:1.6rem;box-shadow:0 6px 20px rgba(124,58,237,0.4);">💬</div>
+                <span style="font-size:2rem;font-weight:800;background:linear-gradient(135deg,#c084fc,#e9d5ff);-webkit-background-clip:text;-webkit-text-fill-color:transparent;">Chattier</span>
+            </div>
+            <p style="color:#94a3b8;font-size:0.9rem;">Community Forum</p>
+        </div>
     </div>
     """, unsafe_allow_html=True)
     
-    tab1, tab2 = st.tabs(["🔑 Sign In", "✨ Sign Up"])
+    tab1, tab2 = st.tabs(["🔑 Sign In", "✨ Create Account"])
     
     with tab1:
         with st.form("login_form"):
-            username = st.text_input("Username", placeholder="Enter your username", key="login_user")
-            password = st.text_input("Password", type="password", placeholder="Enter your password", key="login_pass")
+            username = st.text_input("Username", placeholder="Your username", key="login_user")
+            password = st.text_input("Password", type="password", placeholder="Your password", key="login_pass")
             submitted = st.form_submit_button("Sign In", use_container_width=True)
             if submitted:
                 success, msg = sign_in(username, password)
@@ -601,8 +735,8 @@ elif not st.session_state.authenticated:
     with tab2:
         with st.form("signup_form"):
             username = st.text_input("Username", placeholder="Choose a username", key="signup_user")
-            password = st.text_input("Password", type="password", placeholder="Create password (min 4 chars)", key="signup_pass")
-            confirm = st.text_input("Confirm Password", type="password", placeholder="Confirm password", key="signup_confirm")
+            password = st.text_input("Password", type="password", placeholder="Min 4 characters", key="signup_pass")
+            confirm = st.text_input("Confirm password", type="password", placeholder="Re-enter password", key="signup_confirm")
             submitted = st.form_submit_button("Create Account", use_container_width=True)
             if submitted:
                 success, msg = sign_up(username, password, confirm)
@@ -611,49 +745,49 @@ elif not st.session_state.authenticated:
                 else:
                     st.error(msg)
 
-# Main chat
+# ============ CHAT PAGE ============
 else:
-    # Check for real new messages
+    # Sync messages
     latest_msgs = load_messages()
     if len(latest_msgs) > len(st.session_state.messages):
         st.session_state.messages = latest_msgs
     
     online_count = max(1, len(set(m["username"] for m in st.session_state.messages[-50:])))
     
-    # Chat wrapper
     st.markdown(f"""
-    <div class="chat-wrapper">
+    <div class="chat-container">
         <div class="chat-header">
-            <div class="logo">💬 ChatVerse</div>
-            <div class="online-badge">
-                <span class="online-dot"></span>
-                <span>{online_count} active</span>
+            <div class="brand-logo">
+                <div class="brand-icon">💬</div>
+                <span class="brand-name">Chattier</span>
+            </div>
+            <div class="status-badge">
+                <span class="status-dot"></span>
+                <span>{online_count} online</span>
             </div>
         </div>
+        <div class="messages-area">
     """, unsafe_allow_html=True)
-    
-    # Messages area
-    st.markdown('<div class="messages-container" id="msg-container">', unsafe_allow_html=True)
     
     if not st.session_state.messages:
         st.markdown("""
-        <div class="empty-chat">
+        <div class="empty-state">
             <div style="font-size:3rem;">💫</div>
-            <div style="margin-top:0.5rem;font-size:1.1rem;">No messages yet</div>
-            <div style="font-size:0.85rem;opacity:0.8;">Be the first to start the conversation!</div>
+            <div style="margin-top:0.5rem;font-weight:500;">No messages yet</div>
+            <div style="font-size:0.8rem;opacity:0.7;">Be the first to start the conversation!</div>
         </div>
         """, unsafe_allow_html=True)
     else:
         for msg in st.session_state.messages:
             is_own = msg["username"] == st.session_state.username
             time_str = format_time(msg.get("timestamp", ""))
-            avatar_html = get_avatar_html(msg["username"], 40)
+            avatar_html = get_avatar_html(msg["username"], 36)
             
             st.markdown(f"""
-            <div class="message-row {'own' if is_own else ''}">
-                <div class="msg-avatar">{avatar_html}</div>
+            <div class="msg-row {'own' if is_own else ''}">
+                {avatar_html}
                 <div class="msg-bubble">
-                    <div class="msg-name">
+                    <div class="msg-author">
                         {sanitize_html(msg['username'])}
                         <span class="msg-time">{time_str}</span>
                     </div>
@@ -664,12 +798,11 @@ else:
     
     st.markdown('</div>', unsafe_allow_html=True)
     
-    # Input area
-    st.markdown('<div class="input-area">', unsafe_allow_html=True)
     st.markdown(f"""
-    <div class="user-info">
-        <span>👤 {sanitize_html(st.session_state.username)}</span>
-    </div>
+        <div class="input-section">
+            <div class="user-tag">
+                <span>👤 {sanitize_html(st.session_state.username)}</span>
+            </div>
     """, unsafe_allow_html=True)
     
     with st.form("msg_form", clear_on_submit=True):
@@ -677,7 +810,7 @@ else:
         with c1:
             msg_text = st.text_input(
                 "Message",
-                placeholder="Type your message here...",
+                placeholder="Type a message...",
                 max_chars=500,
                 key="msg_input",
                 label_visibility="collapsed"
@@ -689,9 +822,8 @@ else:
             if send_message(msg_text):
                 st.rerun()
     
-    st.markdown('</div>', unsafe_allow_html=True)
-    st.markdown('</div>', unsafe_allow_html=True)
+    st.markdown('</div></div>', unsafe_allow_html=True)
 
-# Real-time auto-refresh
-time.sleep(1.5)
+# Auto-refresh
+time.sleep(2)
 st.rerun()
