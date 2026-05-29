@@ -8,7 +8,7 @@ from datetime import datetime
 import uuid
 import base64
 from PIL import Image
-import time  # Make sure time is imported
+import time
 
 # Page config MUST be first
 st.set_page_config(
@@ -25,7 +25,7 @@ MESSAGES_FILE = DATA_DIR / "messages.json"
 USERS_FILE = DATA_DIR / "users.json"
 PROFILES_FILE = DATA_DIR / "profiles.json"
 UPLOADS_DIR = DATA_DIR / "uploads"
-UPLOADS_DIR.mkdir(exist_ok=True)
+UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
 
 # Premium wallpaper collection - Expanded
 WALLPAPERS = {
@@ -52,6 +52,9 @@ WALLPAPERS = {
 }
 
 DEFAULT_WALLPAPER = "✨ Abstract Purple"
+
+# Emoji reactions
+EMOJI_REACTIONS = ["👍", "❤️", "😂", "😮", "😢", "🔥", "👏", "🎉"]
 
 # Helper functions
 def hash_password(password):
@@ -104,14 +107,27 @@ def update_profile(username, bio, avatar_file, wallpaper):
     
     if avatar_file is not None:
         try:
+            # Ensure uploads directory exists
+            UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
+            
             image = Image.open(avatar_file)
-            image = image.convert("RGB")
+            # Handle different image modes
+            if image.mode in ('RGBA', 'LA', 'P'):
+                background = Image.new('RGB', image.size, (255, 255, 255))
+                if image.mode == 'P':
+                    image = image.convert('RGBA')
+                background.paste(image, mask=image.split()[-1] if image.mode == 'RGBA' else None)
+                image = background
+            else:
+                image = image.convert("RGB")
+                
             image = image.resize((200, 200), Image.Resampling.LANCZOS)
             avatar_path = UPLOADS_DIR / f"{username}_avatar.jpg"
             image.save(avatar_path, "JPEG", quality=85)
             profiles[username]["avatar"] = str(avatar_path)
         except Exception as e:
             st.error(f"Could not process image: {e}")
+            return False
     
     save_profiles(profiles)
     return True
@@ -138,8 +154,11 @@ def get_avatar_html(username, size=40):
     letter = username[0].upper() if username else "?"
     return f'<div style="width:{size}px;height:{size}px;border-radius:50%;background:{bg_color};display:flex;align-items:center;justify-content:center;font-weight:700;color:white;font-size:{size*0.4}px;flex-shrink:0;box-shadow:0 2px 8px rgba(0,0,0,0.1);">{letter}</div>'
 
-def load_messages():
-    return load_json(MESSAGES_FILE, [])
+def load_messages(limit=None):
+    messages = load_json(MESSAGES_FILE, [])
+    if limit:
+        return messages[-limit:]
+    return messages
 
 def save_messages():
     save_json(MESSAGES_FILE, st.session_state.messages)
@@ -163,6 +182,38 @@ def format_time(ts):
     except:
         return ""
 
+def add_reaction(msg_id, emoji):
+    for msg in st.session_state.messages:
+        if msg.get("id") == msg_id:
+            if "reactions" not in msg:
+                msg["reactions"] = {}
+            if emoji not in msg["reactions"]:
+                msg["reactions"][emoji] = []
+            username = st.session_state.username
+            if username in msg["reactions"][emoji]:
+                msg["reactions"][emoji].remove(username)
+            else:
+                msg["reactions"][emoji].append(username)
+            # Remove empty reaction lists
+            msg["reactions"] = {k: v for k, v in msg["reactions"].items() if v}
+            if not msg["reactions"]:
+                del msg["reactions"]
+            break
+    save_messages()
+
+def delete_message(msg_id):
+    st.session_state.messages = [m for m in st.session_state.messages if m.get("id") != msg_id]
+    save_messages()
+
+def edit_message(msg_id, new_text):
+    for msg in st.session_state.messages:
+        if msg.get("id") == msg_id:
+            msg["text"] = sanitize_html(new_text)
+            msg["edited"] = True
+            msg["edited_timestamp"] = datetime.now().isoformat()
+            break
+    save_messages()
+
 # Initialize session state
 if 'initialized' not in st.session_state:
     st.session_state.messages = load_messages()
@@ -170,6 +221,8 @@ if 'initialized' not in st.session_state:
     st.session_state.username = ""
     st.session_state.show_profile = False
     st.session_state.wallpaper = DEFAULT_WALLPAPER
+    st.session_state.editing_msg_id = None
+    st.session_state.replying_to = None
     st.session_state.initialized = True
 
 # Load wallpaper from profile if authenticated
@@ -378,6 +431,11 @@ st.markdown(f"""
         gap: 0.75rem;
         animation: slideIn 0.3s ease;
         align-items: flex-start;
+        position: relative;
+    }}
+    
+    .message-row:hover .message-actions {{
+        opacity: 1;
     }}
     
     .message-row-own {{
@@ -438,6 +496,92 @@ st.markdown(f"""
         font-size: 0.9rem;
         line-height: 1.4;
         word-wrap: break-word;
+    }}
+    
+    .edited-badge {{
+        font-size: 0.6rem;
+        color: #94a3b8;
+        font-style: italic;
+        margin-left: 0.3rem;
+    }}
+    
+    /* Message Actions */
+    .message-actions {{
+        opacity: 0;
+        transition: opacity 0.2s;
+        display: flex;
+        gap: 0.2rem;
+        margin-top: 0.3rem;
+    }}
+    
+    .message-row-own .message-actions {{
+        justify-content: flex-end;
+    }}
+    
+    .action-btn {{
+        background: rgba(255, 255, 255, 0.1);
+        border: none;
+        color: #94a3b8;
+        padding: 0.2rem 0.5rem;
+        border-radius: 0.5rem;
+        font-size: 0.7rem;
+        cursor: pointer;
+        transition: all 0.2s;
+    }}
+    
+    .action-btn:hover {{
+        background: rgba(255, 255, 255, 0.2);
+        color: #f1f5f9;
+    }}
+    
+    /* Reply indicator */
+    .reply-preview {{
+        background: rgba(102, 126, 234, 0.1);
+        border-left: 3px solid #667eea;
+        padding: 0.3rem 0.5rem;
+        border-radius: 0.3rem;
+        margin-bottom: 0.5rem;
+        font-size: 0.7rem;
+        color: #94a3b8;
+    }}
+    
+    /* Reaction bar */
+    .reaction-bar {{
+        display: flex;
+        gap: 0.3rem;
+        margin-top: 0.3rem;
+        flex-wrap: wrap;
+    }}
+    
+    .reaction-item {{
+        background: rgba(255, 255, 255, 0.15);
+        padding: 0.1rem 0.4rem;
+        border-radius: 1rem;
+        font-size: 0.75rem;
+        display: flex;
+        align-items: center;
+        gap: 0.2rem;
+        cursor: pointer;
+        transition: all 0.2s;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+    }}
+    
+    .reaction-item:hover {{
+        background: rgba(255, 255, 255, 0.25);
+    }}
+    
+    .reaction-item.active {{
+        background: rgba(102, 126, 234, 0.3);
+        border-color: rgba(102, 126, 234, 0.5);
+    }}
+    
+    .reaction-emoji {{
+        font-size: 0.8rem;
+    }}
+    
+    .reaction-count {{
+        color: #cbd5e1;
+        font-weight: 600;
     }}
     
     /* Input Area */
@@ -637,6 +781,8 @@ def sign_out():
     st.session_state.username = ""
     st.session_state.show_profile = False
     st.session_state.wallpaper = DEFAULT_WALLPAPER
+    st.session_state.editing_msg_id = None
+    st.session_state.replying_to = None
     st.rerun()
 
 def send_message(text):
@@ -651,11 +797,24 @@ def send_message(text):
         "id": str(uuid.uuid4()),
         "username": st.session_state.username,
         "text": sanitize_html(text),
-        "timestamp": datetime.now().isoformat()
+        "timestamp": datetime.now().isoformat(),
+        "edited": False
     }
+    
+    # Add reply info if replying
+    if st.session_state.replying_to:
+        msg["reply_to"] = st.session_state.replying_to
+        st.session_state.replying_to = None
+    
     st.session_state.messages.append(msg)
     save_messages()
     return True
+
+def get_reply_message(msg_id):
+    for msg in st.session_state.messages:
+        if msg.get("id") == msg_id:
+            return msg
+    return None
 
 # Main app layout using HTML/CSS
 if not st.session_state.authenticated:
@@ -885,18 +1044,97 @@ else:
             is_own = msg["username"] == st.session_state.username
             time_str = format_time(msg.get("timestamp", ""))
             avatar_html = get_avatar_html(msg["username"], 36)
+            msg_id = msg.get("id", "")
+            
+            # Check if this message is being edited
+            is_editing = st.session_state.get("editing_msg_id") == msg_id
             
             st.markdown(f"""
             <div class="message-row {'message-row-own' if is_own else ''}">
                 {avatar_html}
                 <div class="message-content">
+            """, unsafe_allow_html=True)
+            
+            # Show reply preview if this is a reply
+            if msg.get("reply_to"):
+                reply_msg = get_reply_message(msg["reply_to"])
+                if reply_msg:
+                    st.markdown(f"""
+                    <div class="reply-preview">
+                        ↩️ Replying to <strong>{sanitize_html(reply_msg['username'])}</strong>: {sanitize_html(reply_msg['text'][:50])}...
+                    </div>
+                    """, unsafe_allow_html=True)
+            
+            # Edit mode or display mode
+            if is_editing:
+                with st.form(key=f"edit_form_{msg_id}"):
+                    edited_text = st.text_input("Edit message", value=msg['text'], max_chars=500, key=f"edit_input_{msg_id}", label_visibility="collapsed")
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        save_edit = st.form_submit_button("💾 Save", use_container_width=True)
+                    with col2:
+                        cancel_edit = st.form_submit_button("❌ Cancel", use_container_width=True)
+                    
+                    if save_edit and edited_text.strip():
+                        edit_message(msg_id, edited_text.strip())
+                        st.session_state.editing_msg_id = None
+                        st.rerun()
+                    elif cancel_edit:
+                        st.session_state.editing_msg_id = None
+                        st.rerun()
+            else:
+                # Normal message display
+                edited_badge = ' <span class="edited-badge">(edited)</span>' if msg.get("edited") else ''
+                st.markdown(f"""
                     <div class="message-bubble">
                         <div class="message-author">
                             <span>{sanitize_html(msg['username'])}</span>
-                            <span class="message-time">{time_str}</span>
+                            <span class="message-time">{time_str}{edited_badge}</span>
                         </div>
                         <div class="message-text">{msg['text']}</div>
                     </div>
+                """, unsafe_allow_html=True)
+                
+                # Message actions
+                st.markdown('<div class="message-actions">', unsafe_allow_html=True)
+                
+                # Action buttons in columns
+                col1, col2, col3, col4 = st.columns([1, 1, 1, 1])
+                
+                with col1:
+                    if st.button("↩️", key=f"reply_{msg_id}", help="Reply"):
+                        st.session_state.replying_to = msg_id
+                        st.rerun()
+                
+                with col2:
+                    if st.button("👍", key=f"react_{msg_id}", help="Add reaction"):
+                        add_reaction(msg_id, "👍")
+                        st.rerun()
+                
+                with col3:
+                    if is_own and st.button("✏️", key=f"edit_{msg_id}", help="Edit message"):
+                        st.session_state.editing_msg_id = msg_id
+                        st.rerun()
+                
+                with col4:
+                    if is_own and st.button("🗑️", key=f"delete_{msg_id}", help="Delete message"):
+                        delete_message(msg_id)
+                        st.rerun()
+                
+                # Reaction bar
+                if msg.get("reactions"):
+                    st.markdown('<div class="reaction-bar">', unsafe_allow_html=True)
+                    for emoji, users in msg["reactions"].items():
+                        is_active = st.session_state.username in users
+                        active_class = "active" if is_active else ""
+                        if st.button(f"{emoji} {len(users)}", key=f"reaction_{msg_id}_{emoji}", help=f"Reacted by: {', '.join(users)}"):
+                            add_reaction(msg_id, emoji)
+                            st.rerun()
+                    st.markdown('</div>', unsafe_allow_html=True)
+                
+                st.markdown('</div>', unsafe_allow_html=True)
+            
+            st.markdown("""
                 </div>
             </div>
             """, unsafe_allow_html=True)
@@ -907,13 +1145,27 @@ else:
                 <div class="input-area">
     """, unsafe_allow_html=True)
     
+    # Show reply indicator if replying to someone
+    if st.session_state.replying_to:
+        reply_msg = get_reply_message(st.session_state.replying_to)
+        if reply_msg:
+            st.markdown(f"""
+            <div class="reply-preview" style="margin-bottom: 0.5rem;">
+                ↩️ Replying to <strong>{sanitize_html(reply_msg['username'])}</strong>: {sanitize_html(reply_msg['text'][:50])}...
+            </div>
+            """, unsafe_allow_html=True)
+            if st.button("❌ Cancel Reply", key="cancel_reply"):
+                st.session_state.replying_to = None
+                st.rerun()
+    
     # Message input
     with st.form("msg_form", clear_on_submit=True):
         col1, col2 = st.columns([5, 1])
         with col1:
+            placeholder = f"Replying..." if st.session_state.replying_to else f"Message as @{st.session_state.username}..."
             msg_text = st.text_input(
                 "Message",
-                placeholder=f"Message as @{st.session_state.username}...",
+                placeholder=placeholder,
                 max_chars=500,
                 key="msg_input",
                 label_visibility="collapsed"
