@@ -1,716 +1,646 @@
-import streamlit as st
-import json
-import os
-import html
-import hashlib
-import pathlib
-from datetime import datetime
-import uuid
-import threading
-import time
-
-# Page config MUST be the first Streamlit command
-st.set_page_config(
-    page_title="ChatVerse • community forum",
-    page_icon="💬",
-    layout="wide",
-    initial_sidebar_state="collapsed"
-)
-
-# Initialize paths and directories
-DATA_DIR = pathlib.Path("data")
-DATA_DIR.mkdir(exist_ok=True)
-MESSAGES_FILE = DATA_DIR / "chat_messages.json"
-USERS_FILE = DATA_DIR / "users.json"
-PROFILES_FILE = DATA_DIR / "profiles.json"
-UPLOADS_DIR = DATA_DIR / "uploads"
-UPLOADS_DIR.mkdir(exist_ok=True)
-
-# Thread lock for file operations
-file_lock = threading.Lock()
-
-# Custom CSS - Modern Forum Design
-st.markdown("""
-<style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
-    
-    * {
-        font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
-    }
-    
-    #MainMenu {visibility: hidden;}
-    footer {visibility: hidden;}
-    header {visibility: hidden;}
-    
-    .stApp {
-        background: linear-gradient(145deg, #0f172a 0%, #1e293b 100%);
-    }
-    
-    .forum-container {
-        width: 100%;
-        max-width: 850px;
-        height: 85vh;
-        max-height: 750px;
-        background: rgba(255, 255, 255, 0.05);
-        backdrop-filter: blur(18px);
-        -webkit-backdrop-filter: blur(18px);
-        border: 1px solid rgba(255, 255, 255, 0.15);
-        border-radius: 2.5rem;
-        box-shadow: 0 30px 50px rgba(0, 0, 0, 0.6), inset 0 0 15px rgba(255, 255, 255, 0.05);
-        display: flex;
-        flex-direction: column;
-        overflow: hidden;
-        color: #e2e8f0;
-        margin: 2rem auto;
-    }
-    
-    .forum-header {
-        padding: 1.2rem 1.8rem;
-        border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        background: rgba(15, 23, 42, 0.4);
-        backdrop-filter: blur(10px);
-        flex-shrink: 0;
-    }
-    
-    .logo {
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
-    }
-    
-    .logo-icon {
-        font-size: 2rem;
-        filter: drop-shadow(0 0 8px #7c3aed);
-    }
-    
-    .logo h1 {
-        font-weight: 600;
-        font-size: 1.6rem;
-        letter-spacing: -0.3px;
-        background: linear-gradient(to right, #c084fc, #a78bfa);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-        background-clip: text;
-        margin: 0;
-    }
-    
-    .online-badge {
-        background: rgba(255, 255, 255, 0.08);
-        padding: 0.4rem 1rem;
-        border-radius: 2rem;
-        font-size: 0.8rem;
-        font-weight: 500;
-        display: flex;
-        align-items: center;
-        gap: 0.4rem;
-        border: 1px solid rgba(255, 255, 255, 0.15);
-    }
-    
-    .online-dot {
-        width: 10px;
-        height: 10px;
-        background: #10b981;
-        border-radius: 50%;
-        box-shadow: 0 0 10px #10b981;
-        animation: pulse 1.5s infinite;
-    }
-    
-    @keyframes pulse {
-        0%, 100% { opacity: 1; }
-        50% { opacity: 0.5; }
-    }
-    
-    .chat-messages {
-        flex: 1;
-        overflow-y: auto;
-        padding: 1.5rem 1.2rem;
-        display: flex;
-        flex-direction: column-reverse;
-        gap: 0.8rem;
-        background: rgba(0, 0, 0, 0.2);
-        min-height: 0;
-    }
-    
-    .message-row {
-        display: flex;
-        align-items: flex-start;
-        gap: 0.7rem;
-        animation: fadeInUp 0.3s ease-out;
-    }
-    
-    .message-row.own-message {
-        flex-direction: row-reverse;
-    }
-    
-    @keyframes fadeInUp {
-        0% {
-            opacity: 0;
-            transform: translateY(10px);
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ChatVerse • Community Forum</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
         }
-        100% {
-            opacity: 1;
-            transform: translateY(0);
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(145deg, #0f172a 0%, #1e293b 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 1rem;
         }
-    }
-    
-    .avatar {
-        width: 38px;
-        height: 38px;
-        border-radius: 50%;
-        background: linear-gradient(135deg, #7c3aed, #a78bfa);
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-weight: 600;
-        font-size: 0.9rem;
-        color: white;
-        box-shadow: 0 8px 15px rgba(124, 58, 237, 0.4);
-        flex-shrink: 0;
-        text-transform: uppercase;
-    }
-    
-    .own-message .avatar {
-        background: linear-gradient(135deg, #3b82f6, #60a5fa);
-        box-shadow: 0 8px 15px rgba(59, 130, 246, 0.5);
-    }
-    
-    .message-bubble {
-        background: rgba(255, 255, 255, 0.08);
-        backdrop-filter: blur(5px);
-        padding: 0.8rem 1rem;
-        border-radius: 1.2rem 1.2rem 1.2rem 0.3rem;
-        max-width: 70%;
-        border: 1px solid rgba(255, 255, 255, 0.1);
-        box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
-        word-wrap: break-word;
-    }
-    
-    .own-message .message-bubble {
-        background: rgba(59, 130, 246, 0.2);
-        border-radius: 1.2rem 1.2rem 0.3rem 1.2rem;
-        border-color: rgba(59, 130, 246, 0.3);
-    }
-    
-    .message-author {
-        font-weight: 600;
-        font-size: 0.75rem;
-        margin-bottom: 0.2rem;
-        color: #cbd5e1;
-        display: flex;
-        align-items: center;
-        gap: 0.4rem;
-    }
-    
-    .own-message .message-author {
-        color: #93c5fd;
-        justify-content: flex-end;
-    }
-    
-    .time-stamp {
-        font-weight: 400;
-        font-size: 0.65rem;
-        color: #94a3b8;
-    }
-    
-    .message-text {
-        color: #f1f5f9;
-        line-height: 1.4;
-        font-size: 0.9rem;
-    }
-    
-    .empty-chat {
-        text-align: center;
-        color: #64748b;
-        margin: auto;
-        font-style: italic;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        gap: 0.8rem;
-        opacity: 0.8;
-    }
-    
-    .forum-input-area {
-        padding: 0.8rem 1.5rem 1rem;
-        background: rgba(15, 23, 42, 0.6);
-        backdrop-filter: blur(15px);
-        border-top: 1px solid rgba(255, 255, 255, 0.1);
-        flex-shrink: 0;
-    }
-    
-    .stTextInput > div > div > input {
-        background: rgba(255, 255, 255, 0.07) !important;
-        border: 1px solid rgba(255, 255, 255, 0.2) !important;
-        border-radius: 2.5rem !important;
-        padding: 0.7rem 1.2rem !important;
-        color: #f8fafc !important;
-        font-size: 0.9rem !important;
-    }
-    
-    .stTextInput > div > div > input:focus {
-        border-color: #c084fc !important;
-        box-shadow: 0 0 15px rgba(192, 132, 252, 0.3) !important;
-    }
-    
-    .stButton > button {
-        background: linear-gradient(135deg, #7c3aed, #a855f7) !important;
-        border: none !important;
-        border-radius: 50% !important;
-        width: 44px !important;
-        height: 44px !important;
-        display: flex !important;
-        align-items: center !important;
-        justify-content: center !important;
-        cursor: pointer !important;
-        color: white !important;
-        font-size: 1.2rem !important;
-        box-shadow: 0 8px 18px rgba(124, 58, 237, 0.5) !important;
-        border: 1px solid rgba(255, 255, 255, 0.2) !important;
-        padding: 0 !important;
-        min-width: 44px !important;
-    }
-    
-    .stButton > button:hover {
-        background: linear-gradient(135deg, #8b5cf6, #c084fc) !important;
-        transform: scale(1.05) !important;
-    }
-    
-    .chat-messages::-webkit-scrollbar {
-        width: 5px;
-    }
-    
-    .chat-messages::-webkit-scrollbar-track {
-        background: transparent;
-    }
-    
-    .chat-messages::-webkit-scrollbar-thumb {
-        background: rgba(255, 255, 255, 0.15);
-        border-radius: 3px;
-    }
-    
-    @media (max-width: 600px) {
-        .forum-container {
+
+        /* Auth container */
+        .auth-container, .chat-container {
+            width: 100%;
+            max-width: 900px;
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(18px);
+            border-radius: 2rem;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            padding: 2rem;
+            box-shadow: 0 25px 50px rgba(0,0,0,0.3);
+        }
+
+        .chat-container {
             height: 90vh;
-            border-radius: 1.5rem;
-            margin: 0.5rem auto;
+            display: flex;
+            flex-direction: column;
+            padding: 0;
+            overflow: hidden;
         }
-        .message-bubble {
-            max-width: 80%;
+
+        /* Header */
+        .chat-header {
+            padding: 1rem 1.5rem;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: rgba(0,0,0,0.2);
         }
-    }
-    
-    .stForm {
-        border: none !important;
-        padding: 0 !important;
-    }
-</style>
-""", unsafe_allow_html=True)
 
-# JavaScript for auto-refresh with practical timing
-st.markdown("""
-<script>
-    // Auto-refresh every 1 second - practical and smooth
-    let refreshCount = 0;
-    
-    function autoRefresh() {
-        refreshCount++;
-        // Update refresh counter if visible
-        const counter = document.getElementById('refresh-count');
-        if (counter) {
-            counter.textContent = refreshCount;
+        .logo {
+            font-size: 1.5rem;
+            font-weight: bold;
+            background: linear-gradient(135deg, #c084fc, #a78bfa);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
         }
-        
-        // Trigger Streamlit rerun by clicking a hidden button
-        const refreshBtn = window.parent.document.querySelector('[data-testid="stNotification"]');
-        if (!document.hidden) {
-            // Use Streamlit's internal rerun mechanism
-            window.location.reload = null; // Prevent full page reload
+
+        .online-badge {
+            background: rgba(255,255,255,0.1);
+            padding: 0.3rem 0.8rem;
+            border-radius: 2rem;
+            font-size: 0.8rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
         }
-    }
-    
-    // Set refresh interval to 1 second for smooth operation
-    setInterval(function() {
-        // Find and click Streamlit's rerun button if it exists
-        const rerunButton = window.parent.document.querySelector('button[kind="secondary"]');
-        if (rerunButton && !document.querySelector('input:focus')) {
-            // Don't auto-rerun, use Streamlit's auto-refresh instead
+
+        .online-dot {
+            width: 8px;
+            height: 8px;
+            background: #10b981;
+            border-radius: 50%;
+            animation: pulse 1.5s infinite;
         }
-    }, 1000);
-</script>
-""", unsafe_allow_html=True)
 
-# Helper functions
-def hash_password(password):
-    return hashlib.sha256(password.encode()).hexdigest()
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
 
-def sanitize_text(text):
-    return html.escape(text)
+        /* Messages area */
+        .messages-area {
+            flex: 1;
+            overflow-y: auto;
+            padding: 1.5rem;
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
 
-def format_time(timestamp_str):
-    try:
-        msg_time = datetime.fromisoformat(timestamp_str)
-        now = datetime.now()
-        diff = now - msg_time
-        
-        if diff.days == 0:
-            if diff.seconds < 60:
-                return "Just now"
-            elif diff.seconds < 3600:
-                return f"{diff.seconds // 60}m ago"
-            else:
-                return f"{diff.seconds // 3600}h ago"
-        elif diff.days == 1:
-            return "Yesterday"
-        else:
-            return msg_time.strftime("%b %d")
-    except:
-        return "Unknown"
+        .message {
+            display: flex;
+            gap: 0.7rem;
+            animation: slideIn 0.3s ease;
+        }
 
-def load_json_file(file_path, default=None):
-    try:
-        if file_path.exists():
-            with file_lock:
-                with open(file_path, 'r', encoding='utf-8') as f:
-                    data = json.load(f)
-                    return data
-    except:
-        pass
-    return default if default is not None else []
-
-def save_json_file(file_path, data):
-    try:
-        with file_lock:
-            with open(file_path, 'w', encoding='utf-8') as f:
-                json.dump(data, f, ensure_ascii=False, indent=2)
-        return True
-    except:
-        return False
-
-def load_users():
-    return load_json_file(USERS_FILE, {})
-
-def save_users(users):
-    return save_json_file(USERS_FILE, users)
-
-def load_profiles():
-    return load_json_file(PROFILES_FILE, {})
-
-def save_profiles(profiles):
-    return save_json_file(PROFILES_FILE, profiles)
-
-def load_messages():
-    messages = load_json_file(MESSAGES_FILE, [])
-    if not messages:
-        messages = [
-            {
-                "id": "1",
-                "username": "Astra",
-                "text": "Welcome to ChatVerse! 🌟 This is a live forum. Feel free to chat.",
-                "timestamp": datetime.now().isoformat(),
-                "reactions": {"👍": [], "❤️": [], "😂": [], "🔥": [], "👏": []}
-            },
-            {
-                "id": "2",
-                "username": "Nebula",
-                "text": "Hey everyone! Love the vibe here. What's everyone up to? ✨",
-                "timestamp": datetime.now().isoformat(),
-                "reactions": {"👍": [], "❤️": [], "😂": [], "🔥": [], "👏": []}
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
             }
-        ]
-        save_json_file(MESSAGES_FILE, messages)
-    return messages
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
 
-def save_messages():
-    return save_json_file(MESSAGES_FILE, st.session_state.messages)
+        .message.own {
+            flex-direction: row-reverse;
+        }
 
-# Initialize session state
-if 'messages' not in st.session_state:
-    st.session_state.messages = load_messages()
-if 'username' not in st.session_state:
-    st.session_state.username = "Guest_" + str(uuid.uuid4())[:6]
-if 'authenticated' not in st.session_state:
-    st.session_state.authenticated = False
-if 'user_email' not in st.session_state:
-    st.session_state.user_email = ""
-if 'show_auth' not in st.session_state:
-    st.session_state.show_auth = False
-if 'auth_mode' not in st.session_state:
-    st.session_state.auth_mode = "signin"
-if 'message_count' not in st.session_state:
-    st.session_state.message_count = len(st.session_state.messages)
+        .avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #7c3aed, #a78bfa);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            color: white;
+            flex-shrink: 0;
+        }
 
-# Check for new messages (load from file)
-current_messages = load_messages()
-if len(current_messages) > len(st.session_state.messages):
-    st.session_state.messages = current_messages
-    st.session_state.message_count = len(current_messages)
+        .message.own .avatar {
+            background: linear-gradient(135deg, #3b82f6, #60a5fa);
+        }
 
-def sign_up(email, username, password):
-    users = load_users()
-    profiles = load_profiles()
+        .bubble {
+            max-width: 70%;
+            background: rgba(255, 255, 255, 0.08);
+            backdrop-filter: blur(10px);
+            padding: 0.7rem 1rem;
+            border-radius: 1rem;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .message.own .bubble {
+            background: rgba(59, 130, 246, 0.2);
+            border-color: rgba(59, 130, 246, 0.3);
+        }
+
+        .name {
+            font-size: 0.75rem;
+            color: #94a3b8;
+            margin-bottom: 0.2rem;
+        }
+
+        .message.own .name {
+            text-align: right;
+        }
+
+        .text {
+            color: #f1f5f9;
+            word-wrap: break-word;
+        }
+
+        .time {
+            font-size: 0.65rem;
+            color: #64748b;
+            margin-left: 0.5rem;
+        }
+
+        /* Input area */
+        .input-area {
+            padding: 1rem 1.5rem;
+            background: rgba(0,0,0,0.2);
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .message-row {
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        #message {
+            flex: 1;
+            background: rgba(255,255,255,0.07);
+            border: 1px solid rgba(255,255,255,0.2);
+            padding: 0.7rem 1rem;
+            border-radius: 2rem;
+            color: white;
+            font-size: 0.9rem;
+        }
+
+        button {
+            background: linear-gradient(135deg, #7c3aed, #a855f7);
+            border: none;
+            padding: 0.7rem 1.5rem;
+            border-radius: 2rem;
+            color: white;
+            cursor: pointer;
+            font-weight: bold;
+            transition: transform 0.2s;
+        }
+
+        button:hover {
+            transform: scale(1.05);
+        }
+
+        input:focus {
+            outline: none;
+            border-color: #c084fc;
+        }
+
+        /* Typing indicator */
+        .typing-indicator {
+            background: rgba(255, 255, 255, 0.08);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 1rem;
+            padding: 0.5rem 1rem;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin-bottom: 1rem;
+        }
+
+        .typing-dot {
+            width: 6px;
+            height: 6px;
+            background: #c084fc;
+            border-radius: 50%;
+            display: inline-block;
+            animation: bounce 1.4s infinite;
+        }
+
+        .typing-dot:nth-child(1) { animation-delay: -0.32s; }
+        .typing-dot:nth-child(2) { animation-delay: -0.16s; }
+
+        @keyframes bounce {
+            0%, 60%, 100% { transform: translateY(0); }
+            30% { transform: translateY(-8px); }
+        }
+
+        /* Form styling */
+        .form-group {
+            margin-bottom: 1rem;
+        }
+
+        .form-group label {
+            display: block;
+            color: #cbd5e1;
+            margin-bottom: 0.5rem;
+        }
+
+        .form-group input {
+            width: 100%;
+            background: rgba(255,255,255,0.07);
+            border: 1px solid rgba(255,255,255,0.2);
+            padding: 0.7rem 1rem;
+            border-radius: 1rem;
+            color: white;
+        }
+
+        .tabs {
+            display: flex;
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .tab {
+            flex: 1;
+            text-align: center;
+            padding: 0.7rem;
+            background: rgba(255,255,255,0.05);
+            border-radius: 1rem;
+            cursor: pointer;
+            color: #94a3b8;
+        }
+
+        .tab.active {
+            background: linear-gradient(135deg, #7c3aed, #a855f7);
+            color: white;
+        }
+
+        .empty {
+            text-align: center;
+            color: #64748b;
+            padding: 2rem;
+        }
+
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: rgba(0,0,0,0.2);
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #7c3aed;
+            border-radius: 10px;
+        }
+    </style>
+</head>
+<body>
+<div id="app"></div>
+
+<script>
+    // Simple working chat app with auth
+    const STORAGE_USERS = 'chatverse_users';
+    const STORAGE_MESSAGES = 'chatverse_messages';
+    const STORAGE_SESSION = 'chatverse_session';
     
-    if username in users:
-        return False, "Username already exists"
+    let currentUser = null;
+    let messages = [];
+    let activeTab = 'login';
     
-    if any(u.get('email') == email for u in users.values()):
-        return False, "Email already registered"
-    
-    users[username] = {
-        "email": email,
-        "password": hash_password(password),
-        "created_at": datetime.now().isoformat()
+    // Load data
+    function loadUsers() {
+        const saved = localStorage.getItem(STORAGE_USERS);
+        if (saved) {
+            return JSON.parse(saved);
+        }
+        return {};
     }
     
-    profiles[username] = {
-        "bio": "",
-        "avatar_url": None,
-        "joined_date": datetime.now().isoformat()
+    function saveUsers(users) {
+        localStorage.setItem(STORAGE_USERS, JSON.stringify(users));
     }
     
-    if save_users(users) and save_profiles(profiles):
-        return True, "Account created successfully!"
-    return False, "Failed to create account"
-
-def sign_in(username, password):
-    users = load_users()
-    
-    if username not in users:
-        return False, "Username not found"
-    
-    if users[username]["password"] != hash_password(password):
-        return False, "Incorrect password"
-    
-    return True, "Signed in successfully!"
-
-def sign_out():
-    st.session_state.authenticated = False
-    st.session_state.username = "Guest_" + str(uuid.uuid4())[:6]
-    st.session_state.user_email = ""
-    st.session_state.show_auth = False
-
-def add_message(message_text):
-    if not message_text or not message_text.strip():
-        return False
-    
-    message_text = message_text.strip()
-    
-    if len(message_text) > 350:
-        st.warning("Message too long (max 350 characters)")
-        return False
-    
-    new_msg = {
-        "id": str(uuid.uuid4()),
-        "username": st.session_state.username,
-        "text": sanitize_text(message_text),
-        "timestamp": datetime.now().isoformat(),
-        "reactions": {"👍": [], "❤️": [], "😂": [], "🔥": [], "👏": []}
+    function loadMessages() {
+        const saved = localStorage.getItem(STORAGE_MESSAGES);
+        if (saved) {
+            return JSON.parse(saved);
+        }
+        return [
+            { id: '1', username: 'Astra', text: 'Welcome to ChatVerse! 🌟', time: new Date(Date.now() - 3600000).toLocaleTimeString() },
+            { id: '2', username: 'Nebula', text: 'Hey everyone! 👋', time: new Date(Date.now() - 1800000).toLocaleTimeString() }
+        ];
     }
-    st.session_state.messages.append(new_msg)
-    st.session_state.message_count = len(st.session_state.messages)
-    save_messages()
-    return True
-
-# Sidebar
-with st.sidebar:
-    st.markdown("## ⚙️ ChatVerse")
     
-    # Auto-refresh with practical timing
-    st.markdown("### 🔄 Live Updates")
-    auto_refresh = st.checkbox("Auto-refresh", value=True, help="Refresh every 2 seconds")
+    function saveMessages() {
+        localStorage.setItem(STORAGE_MESSAGES, JSON.stringify(messages));
+    }
     
-    if auto_refresh:
-        st.success("🟢 Live • 2s")
-        st.caption(f"Messages: {st.session_state.message_count}")
+    function saveSession() {
+        if (currentUser) {
+            localStorage.setItem(STORAGE_SESSION, currentUser);
+        } else {
+            localStorage.removeItem(STORAGE_SESSION);
+        }
+    }
     
-    st.markdown("---")
+    function loadSession() {
+        const saved = localStorage.getItem(STORAGE_SESSION);
+        if (saved) {
+            currentUser = saved;
+            renderChat();
+        } else {
+            renderAuth();
+        }
+    }
     
-    if not st.session_state.authenticated:
-        st.markdown("### 👋 Welcome!")
-        col1, col2 = st.columns(2)
-        with col1:
-            if st.button("🔑 Sign In", use_container_width=True):
-                st.session_state.show_auth = True
-                st.session_state.auth_mode = "signin"
-                st.rerun()
-        with col2:
-            if st.button("✨ Sign Up", use_container_width=True):
-                st.session_state.show_auth = True
-                st.session_state.auth_mode = "signup"
-                st.rerun()
-    else:
-        st.markdown(f"### 👤 {st.session_state.username}")
-        if st.button("🚪 Sign Out", use_container_width=True):
-            sign_out()
-            st.rerun()
+    // Hash password (simple)
+    function hashPassword(password) {
+        let hash = 0;
+        for (let i = 0; i < password.length; i++) {
+            hash = ((hash << 5) - hash) + password.charCodeAt(i);
+            hash |= 0;
+        }
+        return hash.toString();
+    }
     
-    st.markdown("---")
-    st.markdown("### ℹ️ About")
-    st.markdown("**ChatVerse** • Modern community forum with live updates ✨")
-
-# Main layout
-col1, col2, col3 = st.columns([1, 3, 1])
-
-with col2:
-    # Forum Container
-    st.markdown('<div class="forum-container">', unsafe_allow_html=True)
-    
-    # Header
-    st.markdown("""
-    <div class="forum-header">
-        <div class="logo">
-            <span class="logo-icon">💬</span>
-            <h1>ChatVerse</h1>
-        </div>
-        <div class="online-badge">
-            <span class="online-dot"></span>
-            <span>Live</span>
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
-    
-    # Auth modal
-    if st.session_state.show_auth:
-        st.markdown("---")
-        if st.session_state.auth_mode == "signin":
-            st.markdown("### 🔑 Sign In")
-            with st.form("signin_form"):
-                username = st.text_input("Username", key="signin_username")
-                password = st.text_input("Password", type="password", key="signin_password")
-                col1, col2 = st.columns(2)
-                with col1:
-                    submitted = st.form_submit_button("Sign In", use_container_width=True)
-                with col2:
-                    if st.form_submit_button("Cancel", use_container_width=True):
-                        st.session_state.show_auth = False
-                        st.rerun()
-                
-                if submitted:
-                    if username and password:
-                        success, message = sign_in(username, password)
-                        if success:
-                            st.session_state.authenticated = True
-                            st.session_state.username = username
-                            users = load_users()
-                            st.session_state.user_email = users[username].get('email', '')
-                            st.session_state.show_auth = False
-                            st.success(message)
-                            time.sleep(0.5)
-                            st.rerun()
-                        else:
-                            st.error(message)
-                    else:
-                        st.error("Please fill in all fields")
+    // Sign up
+    function signup(username, password, confirm) {
+        if (!username || !password) {
+            alert('Please fill all fields');
+            return false;
+        }
+        if (password !== confirm) {
+            alert('Passwords do not match');
+            return false;
+        }
         
-        elif st.session_state.auth_mode == "signup":
-            st.markdown("### ✨ Create Account")
-            with st.form("signup_form"):
-                email = st.text_input("Email", key="signup_email")
-                username = st.text_input("Username", key="signup_username")
-                password = st.text_input("Password", type="password", key="signup_password")
-                confirm = st.text_input("Confirm Password", type="password", key="signup_confirm")
-                col1, col2 = st.columns(2)
-                with col1:
-                    submitted = st.form_submit_button("Sign Up", use_container_width=True)
-                with col2:
-                    if st.form_submit_button("Cancel", use_container_width=True):
-                        st.session_state.show_auth = False
-                        st.rerun()
-                
-                if submitted:
-                    if email and username and password:
-                        if password != confirm:
-                            st.error("Passwords don't match")
-                        elif len(password) < 6:
-                            st.error("Password must be at least 6 characters")
-                        elif len(username) < 3:
-                            st.error("Username must be at least 3 characters")
-                        else:
-                            success, message = sign_up(email, username, password)
-                            if success:
-                                st.success(message)
-                                time.sleep(0.5)
-                                st.session_state.show_auth = False
-                                st.rerun()
-                            else:
-                                st.error(message)
-                    else:
-                        st.error("Please fill in all fields")
-        st.markdown("---")
+        const users = loadUsers();
+        if (users[username]) {
+            alert('Username already exists');
+            return false;
+        }
+        
+        users[username] = hashPassword(password);
+        saveUsers(users);
+        alert('Account created! Please sign in.');
+        return true;
+    }
     
-    # Chat Messages Area
-    st.markdown('<div class="chat-messages" id="chat-messages">', unsafe_allow_html=True)
+    // Sign in
+    function signin(username, password) {
+        const users = loadUsers();
+        if (users[username] && users[username] === hashPassword(password)) {
+            currentUser = username;
+            saveSession();
+            renderChat();
+            return true;
+        } else {
+            alert('Invalid username or password');
+            return false;
+        }
+    }
     
-    if not st.session_state.messages:
-        st.markdown("""
-        <div class="empty-chat">
-            <span style="font-size:2.5rem;">🌌</span>
-            <span>No messages yet. Start the conversation!</span>
-            <span style="font-size:0.8rem;">Be friendly ✨</span>
-        </div>
-        """, unsafe_allow_html=True)
-    else:
-        # Display newest first
-        for msg in reversed(st.session_state.messages):
-            is_own = msg['username'] == st.session_state.username
-            avatar_letter = msg['username'][0].upper() if msg['username'] else "?"
-            time_str = format_time(msg['timestamp'])
+    // Sign out
+    function signout() {
+        currentUser = null;
+        saveSession();
+        renderAuth();
+    }
+    
+    // Send message
+    function sendMessage() {
+        const input = document.getElementById('message');
+        const text = input.value.trim();
+        if (!text) return;
+        
+        const newMsg = {
+            id: Date.now().toString(),
+            username: currentUser,
+            text: text,
+            time: new Date().toLocaleTimeString()
+        };
+        
+        messages.push(newMsg);
+        saveMessages();
+        renderMessages();
+        input.value = '';
+        input.focus();
+    }
+    
+    // Clear chat
+    function clearChat() {
+        if (confirm('Clear all messages? This cannot be undone.')) {
+            messages = [];
+            saveMessages();
+            renderMessages();
+        }
+    }
+    
+    // Render messages
+    function renderMessages() {
+        const container = document.getElementById('messages');
+        if (!container) return;
+        
+        if (messages.length === 0) {
+            container.innerHTML = '<div class="empty">💫 No messages yet. Start the conversation!</div>';
+            return;
+        }
+        
+        let html = '';
+        for (let msg of messages) {
+            const isOwn = msg.username === currentUser;
+            const avatar = msg.username.charAt(0).toUpperCase();
             
-            message_html = f"""
-            <div class="message-row {'own-message' if is_own else ''}">
-                <div class="avatar">{avatar_letter}</div>
-                <div class="message-bubble">
-                    <div class="message-author">
-                        {sanitize_text(msg['username'])}
-                        <span class="time-stamp">{time_str}</span>
+            html += `
+                <div class="message ${isOwn ? 'own' : ''}">
+                    <div class="avatar">${avatar}</div>
+                    <div class="bubble">
+                        <div class="name">
+                            ${escapeHtml(msg.username)}
+                            <span class="time">${escapeHtml(msg.time)}</span>
+                        </div>
+                        <div class="text">${escapeHtml(msg.text)}</div>
                     </div>
-                    <div class="message-text">{msg['text']}</div>
+                </div>
+            `;
+        }
+        
+        container.innerHTML = html;
+        container.scrollTop = container.scrollHeight;
+    }
+    
+    // Typing indicator
+    function showTypingIndicator() {
+        const container = document.getElementById('typingContainer');
+        if (!container) return;
+        
+        const others = [...new Set(messages.filter(m => m.username !== currentUser).map(m => m.username))];
+        if (others.length > 0 && Math.random() < 0.15) {
+            const typingUser = others[Math.floor(Math.random() * others.length)];
+            container.innerHTML = `
+                <div class="typing-indicator">
+                    <span>✍️ ${escapeHtml(typingUser)}</span>
+                    <span class="typing-dot"></span>
+                    <span class="typing-dot"></span>
+                    <span class="typing-dot"></span>
+                </div>
+            `;
+            setTimeout(() => {
+                if (document.getElementById('typingContainer')) {
+                    document.getElementById('typingContainer').innerHTML = '';
+                }
+            }, 3000);
+        } else {
+            container.innerHTML = '';
+        }
+    }
+    
+    function escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+    
+    // Render chat UI
+    function renderChat() {
+        messages = loadMessages();
+        
+        const onlineCount = new Set(messages.map(m => m.username)).size + 1;
+        
+        const app = document.getElementById('app');
+        app.innerHTML = `
+            <div class="chat-container">
+                <div class="chat-header">
+                    <div class="logo">💬 ChatVerse</div>
+                    <div class="online-badge">
+                        <span class="online-dot"></span>
+                        <span>${onlineCount} online</span>
+                    </div>
+                </div>
+                
+                <div id="typingContainer"></div>
+                
+                <div class="messages-area" id="messages"></div>
+                
+                <div class="input-area">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+                        <span style="color: #a5b4fc;">👤 ${escapeHtml(currentUser)}</span>
+                        <button onclick="clearChat()" style="background: rgba(255,255,255,0.1); padding: 0.3rem 0.8rem; font-size: 0.7rem;">🗑️ Clear</button>
+                    </div>
+                    <div class="message-row">
+                        <input type="text" id="message" placeholder="Type your message..." maxlength="300">
+                        <button onclick="sendMessage()">Send</button>
+                    </div>
                 </div>
             </div>
-            """
-            st.markdown(message_html, unsafe_allow_html=True)
-    
-    st.markdown('</div>', unsafe_allow_html=True)
-    
-    # Input Area
-    st.markdown('<div class="forum-input-area">', unsafe_allow_html=True)
-    
-    if not st.session_state.authenticated:
-        new_username = st.text_input(
-            "Your name",
-            value=st.session_state.username.replace("Guest_", ""),
-            max_chars=18,
-            placeholder="e.g. Nova",
-            key="username_input",
-            label_visibility="collapsed"
-        )
-        if new_username and new_username != st.session_state.username.replace("Guest_", ""):
-            st.session_state.username = new_username if new_username else st.session_state.username
-            st.rerun()
-    
-    with st.form(key="message_form", clear_on_submit=True):
-        msg_col1, msg_col2 = st.columns([5, 1])
-        with msg_col1:
-            message = st.text_input(
-                "Message",
-                placeholder="Write your message...",
-                max_chars=350,
-                key="message_input",
-                label_visibility="collapsed"
-            )
-        with msg_col2:
-            submitted = st.form_submit_button("▶", use_container_width=True)
+        `;
         
-        if submitted and message and message.strip():
-            if add_message(message):
-                st.rerun()
+        renderMessages();
+        
+        // Auto-refresh every 0.5 seconds
+        setInterval(() => {
+            const newMessages = loadMessages();
+            if (JSON.stringify(messages) !== JSON.stringify(newMessages)) {
+                messages = newMessages;
+                renderMessages();
+            }
+            showTypingIndicator();
+        }, 500);
+        
+        // Enter key to send
+        const input = document.getElementById('message');
+        if (input) {
+            input.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') sendMessage();
+            });
+        }
+    }
     
-    st.markdown('</div>', unsafe_allow_html=True)
-    st.markdown('</div>', unsafe_allow_html=True)
-
-# Practical auto-refresh using Streamlit's native mechanism
-if auto_refresh:
-    time.sleep(2)  # Refresh every 2 seconds - practical and smooth
-    st.rerun()
+    // Render auth UI
+    function renderAuth() {
+        const app = document.getElementById('app');
+        app.innerHTML = `
+            <div class="auth-container">
+                <h1 style="text-align: center; margin-bottom: 1rem;">💬 ChatVerse</h1>
+                <p style="text-align: center; color: #94a3b8; margin-bottom: 2rem;">Community Forum</p>
+                
+                <div class="tabs">
+                    <div class="tab ${activeTab === 'login' ? 'active' : ''}" onclick="setTab('login')">Sign In</div>
+                    <div class="tab ${activeTab === 'signup' ? 'active' : ''}" onclick="setTab('signup')">Sign Up</div>
+                </div>
+                
+                <div id="authForm"></div>
+            </div>
+        `;
+        renderAuthForm();
+    }
+    
+    function setTab(tab) {
+        activeTab = tab;
+        renderAuth();
+    }
+    
+    function renderAuthForm() {
+        const container = document.getElementById('authForm');
+        if (!container) return;
+        
+        if (activeTab === 'login') {
+            container.innerHTML = `
+                <div class="form-group">
+                    <label>Username</label>
+                    <input type="text" id="loginUsername" placeholder="Enter username">
+                </div>
+                <div class="form-group">
+                    <label>Password</label>
+                    <input type="password" id="loginPassword" placeholder="Enter password">
+                </div>
+                <button onclick="handleLogin()" style="width: 100%;">Sign In</button>
+            `;
+        } else {
+            container.innerHTML = `
+                <div class="form-group">
+                    <label>Username</label>
+                    <input type="text" id="signupUsername" placeholder="Choose username">
+                </div>
+                <div class="form-group">
+                    <label>Password</label>
+                    <input type="password" id="signupPassword" placeholder="Choose password">
+                </div>
+                <div class="form-group">
+                    <label>Confirm Password</label>
+                    <input type="password" id="signupConfirm" placeholder="Confirm password">
+                </div>
+                <button onclick="handleSignup()" style="width: 100%;">Sign Up</button>
+            `;
+        }
+    }
+    
+    function handleLogin() {
+        const username = document.getElementById('loginUsername').value;
+        const password = document.getElementById('loginPassword').value;
+        signin(username, password);
+    }
+    
+    function handleSignup() {
+        const username = document.getElementById('signupUsername').value;
+        const password = document.getElementById('signupPassword').value;
+        const confirm = document.getElementById('signupConfirm').value;
+        signup(username, password, confirm);
+    }
+    
+    // Make functions global
+    window.sendMessage = sendMessage;
+    window.clearChat = clearChat;
+    window.setTab = setTab;
+    window.handleLogin = handleLogin;
+    window.handleSignup = handleSignup;
+    
+    // Start app
+    loadSession();
+</script>
+</body>
+</html>
