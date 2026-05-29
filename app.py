@@ -15,7 +15,7 @@ st.set_page_config(
     page_title="Chattier • Community Forum",
     page_icon="💬",
     layout="wide",
-    initial_sidebar_state="collapsed"
+    initial_sidebar_state="expanded"
 )
 
 # Initialize paths
@@ -207,22 +207,26 @@ def delete_message(msg_id):
     try:
         st.session_state.messages = [m for m in st.session_state.messages if m.get("id") != msg_id]
         save_messages()
+        return True
     except Exception as e:
         st.error(f"Error deleting message: {e}")
+        return False
 
 def edit_message(msg_id, new_text):
     try:
         new_text = sanitize_html(new_text.strip())
         if not new_text:
-            return
+            return False
         for msg in st.session_state.messages:
             if msg.get("id") == msg_id:
                 msg["text"] = new_text
                 msg["edited"] = True
                 break
         save_messages()
+        return True
     except Exception as e:
         st.error(f"Error editing message: {e}")
+        return False
 
 # Authentication functions
 def sign_up(username, password, confirm):
@@ -263,13 +267,12 @@ def sign_in(username, password):
     return False, "Username not found"
 
 def sign_out():
-    for key in list(st.session_state.keys()):
-        if key != 'initialized':
-            del st.session_state[key]
     st.session_state.authenticated = False
     st.session_state.username = ""
     st.session_state.wallpaper = DEFAULT_WALLPAPER
-    st.session_state.sidebar_collapsed = True
+    st.session_state.current_view = "chat"
+    st.session_state.editing_msg_id = None
+    st.session_state.replying_to = None
     st.rerun()
 
 # Initialize session state
@@ -278,14 +281,13 @@ if 'initialized' not in st.session_state:
     st.session_state.authenticated = False
     st.session_state.username = ""
     st.session_state.wallpaper = DEFAULT_WALLPAPER
-    st.session_state.sidebar_collapsed = True
     st.session_state.current_view = "chat"
     st.session_state.editing_msg_id = None
     st.session_state.replying_to = None
     st.session_state.initialized = True
 
 # Load wallpaper from profile if authenticated
-if st.session_state.authenticated:
+if st.session_state.get('authenticated', False):
     profile_data = get_user_profile(st.session_state.username)
     st.session_state.wallpaper = profile_data.get("wallpaper", DEFAULT_WALLPAPER)
 
@@ -351,7 +353,7 @@ st.markdown(f"""
     
     /* Sidebar styling */
     section[data-testid="stSidebar"] {{
-        background: rgba(15, 23, 42, 0.95);
+        background: rgba(15, 23, 42, 0.95) !important;
         backdrop-filter: blur(20px);
     }}
     
@@ -376,6 +378,12 @@ st.markdown(f"""
         box-shadow: 0 5px 20px rgba(102, 126, 234, 0.4);
     }}
     
+    /* Secondary button */
+    .stButton > button[kind="secondary"] {{
+        background: rgba(255, 255, 255, 0.1);
+        border: 1px solid rgba(255, 255, 255, 0.2);
+    }}
+    
     /* Input styling */
     .stTextInput > div > div > input {{
         background: rgba(255, 255, 255, 0.95);
@@ -390,29 +398,16 @@ st.markdown(f"""
         box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.2);
     }}
     
-    /* Reaction buttons */
-    .reaction-btn {{
-        background: rgba(255, 255, 255, 0.1);
-        border: 1px solid rgba(255, 255, 255, 0.2);
-        color: white;
-        padding: 0.2rem 0.5rem;
+    /* Text area */
+    .stTextArea > div > div > textarea {{
+        background: rgba(255, 255, 255, 0.95);
+        color: #1e293b;
+        border: 1px solid rgba(102, 126, 234, 0.3);
         border-radius: 1rem;
-        font-size: 0.8rem;
-        cursor: pointer;
-        margin: 0.2rem;
-        transition: all 0.2s;
+        padding: 0.7rem 1rem;
     }}
     
-    .reaction-btn:hover {{
-        background: rgba(255, 255, 255, 0.2);
-    }}
-    
-    .reaction-btn.active {{
-        background: rgba(102, 126, 234, 0.4);
-        border-color: rgba(102, 126, 234, 0.6);
-    }}
-    
-    /* Profile section */
+    /* Profile card */
     .profile-card {{
         background: rgba(30, 41, 59, 0.7);
         backdrop-filter: blur(20px);
@@ -420,6 +415,26 @@ st.markdown(f"""
         padding: 2rem;
         border: 1px solid rgba(255, 255, 255, 0.1);
         text-align: center;
+    }}
+    
+    /* Theme cards */
+    .theme-card {{
+        border-radius: 1rem;
+        overflow: hidden;
+        border: 2px solid rgba(255, 255, 255, 0.1);
+        cursor: pointer;
+        transition: all 0.3s;
+        margin-bottom: 0.5rem;
+    }}
+    
+    .theme-card:hover {{
+        border-color: #667eea;
+        transform: scale(1.05);
+    }}
+    
+    .theme-card.selected {{
+        border-color: #667eea;
+        box-shadow: 0 0 20px rgba(102, 126, 234, 0.4);
     }}
     
     /* Scrollbar */
@@ -434,6 +449,26 @@ st.markdown(f"""
     ::-webkit-scrollbar-thumb {{
         background: linear-gradient(135deg, #667eea, #764ba2);
         border-radius: 3px;
+    }}
+    
+    /* Divider */
+    hr {{
+        border-color: rgba(255, 255, 255, 0.1);
+    }}
+    
+    /* Metric cards */
+    [data-testid="stMetric"] {{
+        background: rgba(255, 255, 255, 0.1);
+        padding: 0.5rem;
+        border-radius: 0.5rem;
+    }}
+    
+    [data-testid="stMetric"] label {{
+        color: #94a3b8 !important;
+    }}
+    
+    [data-testid="stMetric"] div {{
+        color: white !important;
     }}
 </style>
 """, unsafe_allow_html=True)
@@ -511,16 +546,17 @@ else:
         # Navigation buttons
         st.markdown("### 📱 Navigation")
         
-        if st.button("💬 Chat Room", use_container_width=True, type="primary" if st.session_state.current_view == "chat" else "secondary"):
+        # Use regular buttons without type parameter to avoid errors
+        if st.button("💬 Chat Room", use_container_width=True, key="nav_chat"):
             st.session_state.current_view = "chat"
             st.session_state.editing_msg_id = None
             st.rerun()
         
-        if st.button("👤 Profile Settings", use_container_width=True, type="primary" if st.session_state.current_view == "profile" else "secondary"):
+        if st.button("👤 Profile Settings", use_container_width=True, key="nav_profile"):
             st.session_state.current_view = "profile"
             st.rerun()
         
-        if st.button("🎨 Themes", use_container_width=True, type="primary" if st.session_state.current_view == "themes" else "secondary"):
+        if st.button("🎨 Themes", use_container_width=True, key="nav_themes"):
             st.session_state.current_view = "themes"
             st.rerun()
         
@@ -528,11 +564,13 @@ else:
         
         # Stats
         st.markdown("### 📊 Community Stats")
+        total_messages = len(st.session_state.messages)
+        unique_users = len(set(m["username"] for m in st.session_state.messages)) if st.session_state.messages else 0
+        
         col1, col2 = st.columns(2)
         with col1:
-            st.metric("Messages", len(st.session_state.messages))
+            st.metric("Messages", total_messages)
         with col2:
-            unique_users = len(set(m["username"] for m in st.session_state.messages)) if st.session_state.messages else 0
             st.metric("Members", unique_users)
         
         st.divider()
@@ -556,106 +594,112 @@ else:
         """, unsafe_allow_html=True)
         
         # Messages container
-        chat_container = st.container()
-        
-        with chat_container:
-            if not st.session_state.messages:
-                st.markdown("""
-                <div style="text-align: center; padding: 3rem; color: #94a3b8;">
-                    <div style="font-size: 4rem; margin-bottom: 1rem;">✨</div>
-                    <h3>No messages yet</h3>
-                    <p>Be the first to start the conversation!</p>
-                </div>
-                """, unsafe_allow_html=True)
-            else:
-                # Display last 50 messages
-                for msg in st.session_state.messages[-50:]:
-                    is_own = msg["username"] == st.session_state.username
-                    msg_id = msg.get("id", "")
+        if not st.session_state.messages:
+            st.markdown("""
+            <div style="text-align: center; padding: 3rem; color: #94a3b8;">
+                <div style="font-size: 4rem; margin-bottom: 1rem;">✨</div>
+                <h3>No messages yet</h3>
+                <p>Be the first to start the conversation!</p>
+            </div>
+            """, unsafe_allow_html=True)
+        else:
+            # Display last 50 messages
+            for msg in st.session_state.messages[-50:]:
+                is_own = msg["username"] == st.session_state.username
+                msg_id = msg.get("id", "")
+                
+                # Check if editing
+                if st.session_state.get("editing_msg_id") == msg_id:
+                    with st.form(key=f"edit_{msg_id}"):
+                        st.text_input("Edit message", value=msg['text'], key=f"input_{msg_id}", label_visibility="collapsed")
+                        new_text = st.session_state[f"input_{msg_id}"]
+                        c1, c2 = st.columns(2)
+                        with c1:
+                            if st.form_submit_button("💾 Save", use_container_width=True):
+                                if edit_message(msg_id, new_text):
+                                    st.session_state.editing_msg_id = None
+                                    st.rerun()
+                        with c2:
+                            if st.form_submit_button("❌ Cancel", use_container_width=True):
+                                st.session_state.editing_msg_id = None
+                                st.rerun()
+                else:
+                    # Message display
+                    col1, col2 = st.columns([1, 20])
                     
-                    # Message container
-                    with st.container():
-                        col1, col2 = st.columns([1, 11])
+                    with col1:
+                        st.markdown(get_avatar_html(msg["username"], 35), unsafe_allow_html=True)
+                    
+                    with col2:
+                        edited_mark = " *(edited)*" if msg.get("edited") else ""
+                        st.markdown(f"""
+                        <div class="message-bubble {'message-own' if is_own else ''}">
+                            <strong style="color: {'#c4b5fd' if is_own else '#a5b4fc'};">{sanitize_html(msg['username'])}</strong>
+                            <span style="color: #94a3b8; font-size: 0.7rem;"> • {format_time(msg.get('timestamp', ''))}{edited_mark}</span>
+                            <p style="color: #f8fafc; margin: 0.5rem 0 0 0;">{msg['text']}</p>
+                        </div>
+                        """, unsafe_allow_html=True)
                         
-                        with col1:
-                            st.markdown(get_avatar_html(msg["username"], 40), unsafe_allow_html=True)
+                        # Action buttons
+                        cols = st.columns([1, 1, 1, 1, 1, 10])
                         
-                        with col2:
-                            # Check if editing
-                            if st.session_state.get("editing_msg_id") == msg_id:
-                                with st.form(key=f"edit_{msg_id}"):
-                                    new_text = st.text_input("Edit message", value=msg['text'], key=f"input_{msg_id}")
-                                    c1, c2 = st.columns(2)
-                                    with c1:
-                                        if st.form_submit_button("Save", use_container_width=True):
-                                            edit_message(msg_id, new_text)
-                                            st.session_state.editing_msg_id = None
-                                            st.rerun()
-                                    with c2:
-                                        if st.form_submit_button("Cancel", use_container_width=True):
-                                            st.session_state.editing_msg_id = None
-                                            st.rerun()
-                            else:
-                                # Message display
-                                edited_mark = " *(edited)*" if msg.get("edited") else ""
-                                st.markdown(f"""
-                                <div class="message-bubble {'message-own' if is_own else ''}">
-                                    <strong style="color: {'#c4b5fd' if is_own else '#a5b4fc'};">{sanitize_html(msg['username'])}</strong>
-                                    <span style="color: #94a3b8; font-size: 0.7rem;"> • {format_time(msg.get('timestamp', ''))}{edited_mark}</span>
-                                    <p style="color: #f8fafc; margin: 0.5rem 0 0 0;">{msg['text']}</p>
-                                </div>
-                                """, unsafe_allow_html=True)
-                                
-                                # Action buttons
-                                cols = st.columns([1, 1, 1, 1, 8])
-                                
-                                with cols[0]:
-                                    if st.button("👍", key=f"like_{msg_id}", help="Like"):
-                                        add_reaction(msg_id, "👍")
-                                        st.rerun()
-                                
-                                with cols[1]:
-                                    if st.button("❤️", key=f"love_{msg_id}", help="Love"):
-                                        add_reaction(msg_id, "❤️")
-                                        st.rerun()
-                                
-                                with cols[2]:
-                                    if st.button("↩️", key=f"reply_{msg_id}", help="Reply"):
-                                        st.session_state.replying_to = msg_id
-                                        st.rerun()
-                                
-                                if is_own:
-                                    with cols[3]:
-                                        if st.button("✏️", key=f"editbtn_{msg_id}", help="Edit"):
-                                            st.session_state.editing_msg_id = msg_id
-                                            st.rerun()
-                                    
-                                    # Delete button (separate to avoid accidental clicks)
-                                    if st.button("🗑️ Delete", key=f"delete_{msg_id}", help="Delete message"):
-                                        delete_message(msg_id)
-                                        st.rerun()
-                                
-                                # Show reactions
-                                if msg.get("reactions"):
-                                    reaction_text = ""
-                                    for emoji, users in msg["reactions"].items():
-                                        count = len(users)
-                                        reaction_text += f'<span class="reaction-btn">{emoji} {count}</span> '
-                                    st.markdown(f'<div style="margin-top: 0.3rem;">{reaction_text}</div>', unsafe_allow_html=True)
+                        with cols[0]:
+                            if st.button("👍", key=f"like_{msg_id}", help="Like"):
+                                add_reaction(msg_id, "👍")
+                                st.rerun()
+                        
+                        with cols[1]:
+                            if st.button("❤️", key=f"love_{msg_id}", help="Love"):
+                                add_reaction(msg_id, "❤️")
+                                st.rerun()
+                        
+                        with cols[2]:
+                            if st.button("😂", key=f"laugh_{msg_id}", help="Haha"):
+                                add_reaction(msg_id, "😂")
+                                st.rerun()
+                        
+                        with cols[3]:
+                            if st.button("↩️", key=f"reply_{msg_id}", help="Reply"):
+                                st.session_state.replying_to = msg_id
+                                st.rerun()
+                        
+                        if is_own:
+                            with cols[4]:
+                                if st.button("✏️", key=f"editbtn_{msg_id}", help="Edit"):
+                                    st.session_state.editing_msg_id = msg_id
+                                    st.rerun()
+                        
+                        # Show reactions
+                        if msg.get("reactions"):
+                            reaction_html = '<div style="margin-top: 0.3rem; display: flex; gap: 0.3rem; flex-wrap: wrap;">'
+                            for emoji, users in msg["reactions"].items():
+                                count = len(users)
+                                is_user_reacted = st.session_state.username in users
+                                reaction_html += f'<span style="background: rgba(255, 255, 255, {0.3 if is_user_reacted else 0.1}); padding: 0.1rem 0.5rem; border-radius: 1rem; font-size: 0.8rem; border: 1px solid rgba(255, 255, 255, {0.5 if is_user_reacted else 0.2});">{emoji} {count}</span>'
+                            reaction_html += '</div>'
+                            st.markdown(reaction_html, unsafe_allow_html=True)
+                        
+                        # Delete button for own messages
+                        if is_own:
+                            if st.button("🗑️ Delete", key=f"delete_{msg_id}"):
+                                if delete_message(msg_id):
+                                    st.rerun()
         
         # Reply indicator
         if st.session_state.get("replying_to"):
             reply_msg = next((m for m in st.session_state.messages if m.get("id") == st.session_state.replying_to), None)
             if reply_msg:
-                st.markdown(f"""
-                <div style="background: rgba(102, 126, 234, 0.2); padding: 0.5rem 1rem; border-radius: 0.5rem; margin-bottom: 0.5rem;">
-                    ↩️ Replying to <strong>{sanitize_html(reply_msg['username'])}</strong>: {sanitize_html(reply_msg['text'][:50])}...
-                    <button onclick="cancelReply()" style="float: right; background: none; border: none; color: #94a3b8; cursor: pointer;">✕</button>
-                </div>
-                """, unsafe_allow_html=True)
-                if st.button("Cancel Reply"):
-                    st.session_state.replying_to = None
-                    st.rerun()
+                col1, col2 = st.columns([10, 1])
+                with col1:
+                    st.markdown(f"""
+                    <div style="background: rgba(102, 126, 234, 0.2); padding: 0.5rem 1rem; border-radius: 0.5rem; margin-bottom: 0.5rem; color: #94a3b8;">
+                        ↩️ Replying to <strong style="color: white;">{sanitize_html(reply_msg['username'])}</strong>: {sanitize_html(reply_msg['text'][:50])}...
+                    </div>
+                    """, unsafe_allow_html=True)
+                with col2:
+                    if st.button("✕", key="cancel_reply"):
+                        st.session_state.replying_to = None
+                        st.rerun()
         
         # Message input
         st.divider()
@@ -703,7 +747,7 @@ else:
                         current_wp = st.session_state.wallpaper
                         if update_profile(st.session_state.username, bio, avatar_file, current_wp):
                             st.success("Profile updated!")
-                            time.sleep(0.5)
+                            time.sleep(1)
                             st.rerun()
                 
                 with col_b:
@@ -714,18 +758,22 @@ else:
     elif st.session_state.current_view == "themes":
         # ============ THEMES VIEW ============
         st.markdown('<h2 style="color: white;">🎨 Choose Theme</h2>', unsafe_allow_html=True)
+        st.markdown('<p style="color: #94a3b8; margin-bottom: 1rem;">Select a wallpaper for your chat experience</p>', unsafe_allow_html=True)
         
         # Display themes in grid
-        cols = st.columns(4)
         for i, (theme_name, theme_url) in enumerate(WALLPAPERS.items()):
+            if i % 4 == 0:
+                cols = st.columns(4)
+            
             with cols[i % 4]:
+                is_selected = theme_name == st.session_state.wallpaper
                 st.markdown(f"""
-                <div style="margin-bottom: 1rem; border-radius: 1rem; overflow: hidden; border: 2px solid {'#667eea' if theme_name == st.session_state.wallpaper else 'rgba(255,255,255,0.1)'}; cursor: pointer;">
-                    <img src="{theme_url}" style="width: 100%; height: 100px; object-fit: cover;" />
+                <div class="theme-card {'selected' if is_selected else ''}">
+                    <img src="{theme_url}" style="width: 100%; height: 120px; object-fit: cover;" />
                 </div>
                 """, unsafe_allow_html=True)
                 
-                if st.button(theme_name, key=f"theme_{i}", use_container_width=True):
+                if st.button(f"{'✅ ' if is_selected else ''}{theme_name}", key=f"theme_{i}", use_container_width=True):
                     st.session_state.wallpaper = theme_name
                     profiles = load_profiles()
                     if st.session_state.username in profiles:
@@ -735,13 +783,7 @@ else:
                     save_profiles(profiles)
                     st.rerun()
         
-        if st.button("↩️ Back to Chat", use_container_width=True):
+        st.divider()
+        if st.button("↩️ Back to Chat", use_container_width=True, key="back_from_themes"):
             st.session_state.current_view = "chat"
             st.rerun()
-
-# Footer
-st.markdown("""
-<div style="position: fixed; bottom: 0; left: 0; right: 0; text-align: center; padding: 0.5rem; color: #64748b; font-size: 0.7rem;">
-    Chattier v2.0 • Made with ❤️
-</div>
-""", unsafe_allow_html=True)
