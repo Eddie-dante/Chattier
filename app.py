@@ -42,10 +42,7 @@ UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
 
 # ==================== 40+ WALLPAPERS ====================
 WALLPAPERS = {
-    # Default wallpaper (colorful gradient - generated via CSS)
     "🌈 Colorful Gradient": "gradient_default",
-    
-    # Unsplash wallpapers
     "✨ Abstract Purple": "https://images.unsplash.com/photo-1557682250-33bd709cbe85?w=1920&q=80",
     "🌌 Cosmic Nebula": "https://images.unsplash.com/photo-1534796636912-3b95b3ab5986?w=1920&q=80",
     "🌊 Ocean Waves": "https://images.unsplash.com/photo-1505118380757-91f5f5632de0?w=1920&q=80",
@@ -238,7 +235,7 @@ def get_avatar_html(username, size=40):
             with open(avatar_path, "rb") as f:
                 avatar_bytes = f.read()
             avatar_b64 = base64.b64encode(avatar_bytes).decode()
-            return f'<img src="data:image/jpeg;base64,{avatar_b64}" style="width:{size}px;height:{size}px;border-radius:50%;object-fit:cover;" />'
+            return f'<img src="data:image/jpeg;base64,{avatar_b64}" style="width:{size}px;height:{size}px;border-radius:50%;object-fit:cover;flex-shrink:0;" />'
     except:
         pass
     
@@ -247,7 +244,7 @@ def get_avatar_html(username, size=40):
     color_idx = hash(username) % len(colors)
     bg_color = colors[color_idx]
     letter = username[0].upper() if username else "?"
-    return f'<div style="width:{size}px;height:{size}px;border-radius:50%;background:{bg_color};display:flex;align-items:center;justify-content:center;font-weight:700;color:white;font-size:{size*0.4}px;">{letter}</div>'
+    return f'<div style="width:{size}px;height:{size}px;border-radius:50%;background:{bg_color};display:flex;align-items:center;justify-content:center;font-weight:700;color:white;font-size:{size*0.4}px;flex-shrink:0;">{letter}</div>'
 
 def load_messages():
     if USE_CLOUD:
@@ -418,7 +415,6 @@ if 'initialized' not in st.session_state:
     st.session_state.current_view = "chat"
     st.session_state.editing_msg_id = None
     st.session_state.replying_to = None
-    st.session_state.sidebar_state = "expanded"
     st.session_state.initialized = True
     st.session_state.message_count = len(st.session_state.messages)
 
@@ -436,7 +432,6 @@ wallpaper_url = WALLPAPERS.get(st.session_state.wallpaper, WALLPAPERS[DEFAULT_WA
 
 # ==================== CUSTOM CSS ====================
 
-# Handle default gradient wallpaper
 if wallpaper_url == "gradient_default":
     wallpaper_css = """
         background: linear-gradient(135deg, 
@@ -457,7 +452,6 @@ st.markdown(f"""
     #MainMenu {{visibility: hidden;}}
     footer {{visibility: hidden;}}
     
-    /* Animated gradient keyframes */
     @keyframes gradientShift {{
         0% {{ background-position: 0% 50%; }}
         50% {{ background-position: 100% 50%; }}
@@ -467,6 +461,16 @@ st.markdown(f"""
     @keyframes sidebarGlow {{
         0%, 100% {{ box-shadow: 0 0 20px rgba(102, 126, 234, 0.3); }}
         50% {{ box-shadow: 0 0 40px rgba(240, 147, 251, 0.5), 0 0 60px rgba(102, 126, 234, 0.3); }}
+    }}
+    
+    @keyframes slideInRight {{
+        from {{ opacity: 0; transform: translateX(30px); }}
+        to {{ opacity: 1; transform: translateX(0); }}
+    }}
+    
+    @keyframes slideInLeft {{
+        from {{ opacity: 0; transform: translateX(-30px); }}
+        to {{ opacity: 1; transform: translateX(0); }}
     }}
     
     .stApp {{
@@ -522,33 +526,185 @@ st.markdown(f"""
         border-color: rgba(255, 255, 255, 0.3) !important;
     }}
     
+    /* Message container */
+    .message-wrapper {{
+        display: flex;
+        width: 100%;
+        margin-bottom: 0.8rem;
+    }}
+    
+    .message-wrapper.sent {{
+        justify-content: flex-end;
+        animation: slideInRight 0.3s ease;
+    }}
+    
+    .message-wrapper.received {{
+        justify-content: flex-start;
+        animation: slideInLeft 0.3s ease;
+    }}
+    
+    /* Message bubble */
     .message-bubble {{
-        background: rgba(255, 255, 255, 0.1);
-        backdrop-filter: blur(10px);
+        max-width: 65%;
         padding: 0.8rem 1rem;
-        border-radius: 1rem;
+        border-radius: 1.2rem;
         border: 1px solid rgba(255, 255, 255, 0.1);
-        margin-bottom: 0.5rem;
-        animation: fadeIn 0.2s ease;
+        word-wrap: break-word;
         transition: all 0.3s ease;
     }}
     
-    .message-bubble:hover {{
+    .sent .message-bubble {{
+        background: linear-gradient(135deg, rgba(102, 126, 234, 0.4), rgba(118, 75, 162, 0.4));
+        border-color: rgba(102, 126, 234, 0.5);
+        border-bottom-right-radius: 0.3rem;
+        margin-right: 0.5rem;
+    }}
+    
+    .received .message-bubble {{
+        background: rgba(255, 255, 255, 0.1);
+        backdrop-filter: blur(10px);
+        border-bottom-left-radius: 0.3rem;
+        margin-left: 0.5rem;
+    }}
+    
+    .sent .message-bubble:hover {{
+        background: linear-gradient(135deg, rgba(102, 126, 234, 0.5), rgba(118, 75, 162, 0.5));
+    }}
+    
+    .received .message-bubble:hover {{
         background: rgba(255, 255, 255, 0.15);
     }}
     
-    @keyframes fadeIn {{
-        from {{ opacity: 0; transform: translateY(10px); }}
-        to {{ opacity: 1; transform: translateY(0); }}
+    /* Message header */
+    .message-header {{
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        margin-bottom: 0.3rem;
     }}
     
-    .message-own {{
-        background: linear-gradient(135deg, rgba(102, 126, 234, 0.3), rgba(118, 75, 162, 0.3));
+    .sent .message-header {{
+        justify-content: flex-end;
+    }}
+    
+    .received .message-header {{
+        justify-content: flex-start;
+    }}
+    
+    .message-username {{
+        font-size: 0.75rem;
+        font-weight: 600;
+    }}
+    
+    .sent .message-username {{
+        color: #c4b5fd;
+    }}
+    
+    .received .message-username {{
+        color: #a5b4fc;
+    }}
+    
+    .message-time {{
+        font-size: 0.65rem;
+        color: #94a3b8;
+        font-weight: 400;
+    }}
+    
+    .message-text {{
+        color: #f8fafc;
+        font-size: 0.9rem;
+        line-height: 1.4;
+        word-wrap: break-word;
+    }}
+    
+    .edited-badge {{
+        font-size: 0.6rem;
+        color: #94a3b8;
+        font-style: italic;
+        margin-left: 0.3rem;
+    }}
+    
+    /* Action buttons */
+    .message-actions {{
+        display: flex;
+        gap: 0.2rem;
+        margin-top: 0.3rem;
+        flex-wrap: wrap;
+    }}
+    
+    .sent .message-actions {{
+        justify-content: flex-end;
+    }}
+    
+    .received .message-actions {{
+        justify-content: flex-start;
+    }}
+    
+    .action-btn {{
+        background: rgba(255, 255, 255, 0.1);
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        color: #94a3b8;
+        padding: 0.2rem 0.5rem;
+        border-radius: 0.5rem;
+        font-size: 0.7rem;
+        cursor: pointer;
+        transition: all 0.2s;
+    }}
+    
+    .action-btn:hover {{
+        background: rgba(255, 255, 255, 0.2);
+        color: #f1f5f9;
+    }}
+    
+    /* Avatar */
+    .avatar-container {{
+        flex-shrink: 0;
+        align-self: flex-end;
+    }}
+    
+    .sent .avatar-container {{
+        order: 2;
+        margin-left: 0.5rem;
+    }}
+    
+    .received .avatar-container {{
+        order: 1;
+        margin-right: 0.5rem;
+    }}
+    
+    /* Reaction bar */
+    .reaction-bar {{
+        display: flex;
+        gap: 0.3rem;
+        margin-top: 0.3rem;
+        flex-wrap: wrap;
+    }}
+    
+    .sent .reaction-bar {{
+        justify-content: flex-end;
+    }}
+    
+    .received .reaction-bar {{
+        justify-content: flex-start;
+    }}
+    
+    .reaction-item {{
+        background: rgba(255, 255, 255, 0.1);
+        padding: 0.1rem 0.5rem;
+        border-radius: 1rem;
+        font-size: 0.75rem;
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        cursor: pointer;
+        transition: all 0.2s;
+    }}
+    
+    .reaction-item:hover {{
+        background: rgba(255, 255, 255, 0.2);
+    }}
+    
+    .reaction-item.active {{
+        background: rgba(102, 126, 234, 0.3);
         border-color: rgba(102, 126, 234, 0.5);
-    }}
-    
-    .message-own:hover {{
-        background: linear-gradient(135deg, rgba(102, 126, 234, 0.4), rgba(118, 75, 162, 0.4));
     }}
     
     .stButton > button {{
@@ -643,13 +799,19 @@ st.markdown(f"""
         0%, 100% {{ box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); }}
         50% {{ box-shadow: 0 0 0 6px rgba(16, 185, 129, 0); }}
     }}
+    
+    /* Responsive */
+    @media (max-width: 768px) {{
+        .message-bubble {{
+            max-width: 85%;
+        }}
+    }}
 </style>
 """, unsafe_allow_html=True)
 
 # ==================== SIDEBAR COLLAPSE SCRIPT ====================
 st.markdown("""
 <script>
-    // Function to collapse sidebar
     function collapseSidebar() {
         const sidebar = parent.document.querySelector('[data-testid="stSidebar"]');
         if (sidebar) {
@@ -660,7 +822,6 @@ st.markdown("""
         }
     }
     
-    // Add click listeners to navigation buttons
     setTimeout(() => {
         const buttons = parent.document.querySelectorAll('[data-testid="stSidebar"] button');
         buttons.forEach(button => {
@@ -828,6 +989,7 @@ else:
             for msg in st.session_state.messages[-50:]:
                 is_own = msg["username"] == st.session_state.username
                 msg_id = msg.get("id", "")
+                alignment = "sent" if is_own else "received"
                 
                 if st.session_state.get("editing_msg_id") == msg_id:
                     with st.form(key=f"edit_{msg_id}"):
@@ -843,60 +1005,67 @@ else:
                                 st.session_state.editing_msg_id = None
                                 st.rerun()
                 else:
-                    col1, col2 = st.columns([1, 20])
+                    # Message wrapper with alignment
+                    edited_mark = ' <span class="edited-badge">(edited)</span>' if msg.get("edited") else ""
                     
-                    with col1:
-                        st.markdown(get_avatar_html(msg["username"], 35), unsafe_allow_html=True)
-                    
-                    with col2:
-                        edited_mark = " *(edited)*" if msg.get("edited") else ""
-                        st.markdown(f"""
-                        <div class="message-bubble {'message-own' if is_own else ''}">
-                            <strong style="color: {'#c4b5fd' if is_own else '#a5b4fc'};">{sanitize_html(msg['username'])}</strong>
-                            <span style="color: #94a3b8; font-size: 0.7rem;"> • {format_time(msg.get('timestamp', ''))}{edited_mark}</span>
-                            <p style="color: #f8fafc; margin: 0.5rem 0 0 0;">{msg['text']}</p>
+                    st.markdown(f"""
+                    <div class="message-wrapper {alignment}">
+                        <div class="avatar-container">
+                            {get_avatar_html(msg["username"], 30)}
                         </div>
-                        """, unsafe_allow_html=True)
-                        
-                        cols = st.columns([1, 1, 1, 1, 1, 10])
-                        
-                        with cols[0]:
-                            if st.button("👍", key=f"like_{msg_id}"):
-                                add_reaction(msg_id, "👍")
+                        <div style="max-width: 65%;">
+                            <div class="message-bubble">
+                                <div class="message-header">
+                                    <span class="message-username">{sanitize_html(msg['username'])}</span>
+                                    <span class="message-time">• {format_time(msg.get('timestamp', ''))}{edited_mark}</span>
+                                </div>
+                                <div class="message-text">{msg['text']}</div>
+                            </div>
+                    """, unsafe_allow_html=True)
+                    
+                    # Action buttons
+                    cols = st.columns([1, 1, 1, 1, 1, 10])
+                    
+                    with cols[0]:
+                        if st.button("👍", key=f"like_{msg_id}"):
+                            add_reaction(msg_id, "👍")
+                            st.rerun()
+                    with cols[1]:
+                        if st.button("❤️", key=f"love_{msg_id}"):
+                            add_reaction(msg_id, "❤️")
+                            st.rerun()
+                    with cols[2]:
+                        if st.button("😂", key=f"laugh_{msg_id}"):
+                            add_reaction(msg_id, "😂")
+                            st.rerun()
+                    with cols[3]:
+                        if st.button("↩️", key=f"reply_{msg_id}"):
+                            st.session_state.replying_to = msg_id
+                            st.rerun()
+                    if is_own:
+                        with cols[4]:
+                            if st.button("✏️", key=f"editbtn_{msg_id}"):
+                                st.session_state.editing_msg_id = msg_id
                                 st.rerun()
-                        with cols[1]:
-                            if st.button("❤️", key=f"love_{msg_id}"):
-                                add_reaction(msg_id, "❤️")
+                    
+                    # Reactions
+                    if msg.get("reactions"):
+                        reaction_html = '<div class="reaction-bar">'
+                        for emoji, users in msg["reactions"].items():
+                            count = len(users)
+                            is_user = st.session_state.username in users
+                            active_class = "active" if is_user else ""
+                            reaction_html += f'<span class="reaction-item {active_class}">{emoji} {count}</span>'
+                        reaction_html += '</div>'
+                        st.markdown(reaction_html, unsafe_allow_html=True)
+                    
+                    # Delete button
+                    if is_own:
+                        if st.button("🗑️ Delete", key=f"delete_{msg_id}"):
+                            if delete_message(msg_id):
                                 st.rerun()
-                        with cols[2]:
-                            if st.button("😂", key=f"laugh_{msg_id}"):
-                                add_reaction(msg_id, "😂")
-                                st.rerun()
-                        with cols[3]:
-                            if st.button("↩️", key=f"reply_{msg_id}"):
-                                st.session_state.replying_to = msg_id
-                                st.rerun()
-                        if is_own:
-                            with cols[4]:
-                                if st.button("✏️", key=f"editbtn_{msg_id}"):
-                                    st.session_state.editing_msg_id = msg_id
-                                    st.rerun()
-                        
-                        if msg.get("reactions"):
-                            reaction_html = '<div style="margin-top: 0.3rem; display: flex; gap: 0.3rem; flex-wrap: wrap;">'
-                            for emoji, users in msg["reactions"].items():
-                                count = len(users)
-                                is_user = st.session_state.username in users
-                                opacity = "0.3" if is_user else "0.1"
-                                border = "0.5" if is_user else "0.2"
-                                reaction_html += f'<span style="background: rgba(255,255,255,{opacity}); padding: 0.1rem 0.5rem; border-radius: 1rem; font-size: 0.8rem; border: 1px solid rgba(255,255,255,{border});">{emoji} {count}</span>'
-                            reaction_html += '</div>'
-                            st.markdown(reaction_html, unsafe_allow_html=True)
-                        
-                        if is_own:
-                            if st.button("🗑️ Delete", key=f"delete_{msg_id}"):
-                                if delete_message(msg_id):
-                                    st.rerun()
+                    
+                    st.markdown('</div></div>', unsafe_allow_html=True)
         
         if st.session_state.get("replying_to"):
             reply_msg = next((m for m in st.session_state.messages if m.get("id") == st.session_state.replying_to), None)
@@ -984,7 +1153,6 @@ else:
                 with cols[i % 4]:
                     is_selected = theme_name == st.session_state.wallpaper
                     
-                    # Show gradient preview for default wallpaper
                     if theme_url == "gradient_default":
                         st.markdown(f"""
                         <div class="theme-card {'selected' if is_selected else ''}" style="background: linear-gradient(135deg, #667eea, #764ba2, #f093fb, #f5576c, #4facfe); height: 120px; display: flex; align-items: center; justify-content: center;">
@@ -1022,3 +1190,4 @@ if st.session_state.get('authenticated', False):
         }, 5);
     </script>
     """, unsafe_allow_html=True)
+    
