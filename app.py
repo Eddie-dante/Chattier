@@ -9,6 +9,7 @@ import uuid
 import base64
 from PIL import Image
 import time
+import requests
 
 # Page config MUST be first
 st.set_page_config(
@@ -18,7 +19,21 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Initialize paths
+# ==================== DATABASE CONFIGURATION ====================
+# Load from Streamlit Secrets (for Streamlit Cloud)
+try:
+    JSONBIN_API_KEY = st.secrets["jsonbin"]["api_key"]
+    JSONBIN_BIN_ID = st.secrets["jsonbin"]["bin_id"]
+    USE_CLOUD = True
+    CLOUD_TYPE = "☁️ Cloud Connected"
+except:
+    # Try loading from environment variables (for local testing)
+    JSONBIN_API_KEY = os.environ.get("JSONBIN_API_KEY", "")
+    JSONBIN_BIN_ID = os.environ.get("JSONBIN_BIN_ID", "")
+    USE_CLOUD = bool(JSONBIN_API_KEY and JSONBIN_BIN_ID)
+    CLOUD_TYPE = "☁️ Cloud Connected" if USE_CLOUD else "💻 Local Mode"
+
+# ==================== FILE PATHS ====================
 DATA_DIR = pathlib.Path("data")
 DATA_DIR.mkdir(exist_ok=True)
 MESSAGES_FILE = DATA_DIR / "messages.json"
@@ -41,7 +56,76 @@ WALLPAPERS = {
 
 DEFAULT_WALLPAPER = "✨ Abstract Purple"
 
-# Helper functions
+# ==================== CLOUD DATABASE FUNCTIONS ====================
+
+def load_from_jsonbin():
+    """Load messages from JSONBin cloud database"""
+    if not USE_CLOUD:
+        return None
+    try:
+        url = f"https://api.jsonbin.io/v3/b/{JSONBIN_BIN_ID}/latest"
+        headers = {
+            "X-Master-Key": JSONBIN_API_KEY,
+            "X-Bin-Meta": "false"
+        }
+        response = requests.get(url, headers=headers, timeout=10)
+        if response.status_code == 200:
+            data = response.json()
+            if isinstance(data, list):
+                return data
+            elif isinstance(data, dict):
+                return data.get("messages", [])
+        elif response.status_code == 404:
+            # Bin doesn't exist yet, create it
+            create_bin()
+        return None
+    except Exception as e:
+        print(f"Load error: {e}")
+        return None
+
+def save_to_jsonbin(messages):
+    """Save messages to JSONBin cloud database"""
+    if not USE_CLOUD:
+        return False
+    try:
+        url = f"https://api.jsonbin.io/v3/b/{JSONBIN_BIN_ID}"
+        headers = {
+            "Content-Type": "application/json",
+            "X-Master-Key": JSONBIN_API_KEY,
+            "X-Bin-Versioning": "false"
+        }
+        data = {"messages": messages}
+        response = requests.put(url, json=data, headers=headers, timeout=10)
+        return response.status_code in [200, 201]
+    except Exception as e:
+        print(f"Save error: {e}")
+        return False
+
+def create_bin():
+    """Create a new bin if it doesn't exist"""
+    try:
+        url = "https://api.jsonbin.io/v3/b"
+        headers = {
+            "Content-Type": "application/json",
+            "X-Master-Key": JSONBIN_API_KEY,
+            "X-Bin-Name": "chattier-messages",
+            "X-Bin-Private": "false"
+        }
+        data = {"messages": []}
+        response = requests.post(url, json=data, headers=headers, timeout=10)
+        if response.status_code in [200, 201]:
+            result = response.json()
+            new_bin_id = result.get("metadata", {}).get("id", "")
+            if new_bin_id:
+                # Save the new bin ID
+                save_json(pathlib.Path("data/bin_id.json"), {"bin_id": new_bin_id})
+                return True
+    except Exception as e:
+        print(f"Create bin error: {e}")
+    return False
+
+# ==================== HELPER FUNCTIONS ====================
+
 def hash_password(password):
     return hashlib.sha256(password.encode()).hexdigest()
 
@@ -61,10 +145,12 @@ def load_json(path, default=None):
 
 def save_json(path, data):
     try:
+        path.parent.mkdir(parents=True, exist_ok=True)
         with open(path, 'w', encoding='utf-8') as f:
             json.dump(data, f, indent=2, ensure_ascii=False)
+        return True
     except Exception as e:
-        st.error(f"Error saving data: {e}")
+        return False
 
 def load_users():
     return load_json(USERS_FILE, {})
@@ -140,10 +226,24 @@ def get_avatar_html(username, size=40):
     return f'<div style="width:{size}px;height:{size}px;border-radius:50%;background:{bg_color};display:flex;align-items:center;justify-content:center;font-weight:700;color:white;font-size:{size*0.4}px;">{letter}</div>'
 
 def load_messages():
+    """Load messages - try cloud first, then local"""
+    if USE_CLOUD:
+        cloud_messages = load_from_jsonbin()
+        if cloud_messages is not None:
+            return cloud_messages
+    
     return load_json(MESSAGES_FILE, [])
 
-def save_messages():
-    save_json(MESSAGES_FILE, st.session_state.messages)
+def save_all_messages(messages):
+    """Save messages to cloud and local backup"""
+    if len(messages) > 500:
+        messages = messages[-500:]
+    
+    if USE_CLOUD:
+        save_to_jsonbin(messages)
+    
+    save_json(MESSAGES_FILE, messages)
+    return True
 
 def format_time(ts):
     try:
@@ -160,9 +260,9 @@ def format_time(ts):
             return "Yesterday"
         elif diff.days < 7:
             return f"{diff.days}d ago"
-        return t.strftime("%b %d, %Y")
+        return t.strftime("%b %d, %I:%M %p")
     except Exception:
-        return "Unknown time"
+        return ""
 
 def send_message(text):
     if not text or not text.strip():
@@ -171,6 +271,8 @@ def send_message(text):
     if len(text) > 500:
         return False
     
+    current_messages = load_messages()
+    
     msg = {
         "id": str(uuid.uuid4()),
         "username": st.session_state.username,
@@ -178,13 +280,17 @@ def send_message(text):
         "timestamp": datetime.now().isoformat(),
         "reactions": {}
     }
-    st.session_state.messages.append(msg)
-    save_messages()
-    return True
+    current_messages.append(msg)
+    
+    if save_all_messages(current_messages):
+        st.session_state.messages = current_messages
+        return True
+    return False
 
 def add_reaction(msg_id, emoji):
     try:
-        for msg in st.session_state.messages:
+        current_messages = load_messages()
+        for msg in current_messages:
             if msg.get("id") == msg_id:
                 if "reactions" not in msg:
                     msg["reactions"] = {}
@@ -199,17 +305,23 @@ def add_reaction(msg_id, emoji):
                 else:
                     msg["reactions"][emoji].append(username)
                 break
-        save_messages()
+        
+        save_all_messages(current_messages)
+        st.session_state.messages = current_messages
+        return True
     except Exception as e:
-        st.error(f"Error adding reaction: {e}")
+        st.error(f"Error: {e}")
+        return False
 
 def delete_message(msg_id):
     try:
-        st.session_state.messages = [m for m in st.session_state.messages if m.get("id") != msg_id]
-        save_messages()
+        current_messages = load_messages()
+        current_messages = [m for m in current_messages if m.get("id") != msg_id]
+        save_all_messages(current_messages)
+        st.session_state.messages = current_messages
         return True
     except Exception as e:
-        st.error(f"Error deleting message: {e}")
+        st.error(f"Error: {e}")
         return False
 
 def edit_message(msg_id, new_text):
@@ -217,18 +329,23 @@ def edit_message(msg_id, new_text):
         new_text = sanitize_html(new_text.strip())
         if not new_text:
             return False
-        for msg in st.session_state.messages:
+        
+        current_messages = load_messages()
+        for msg in current_messages:
             if msg.get("id") == msg_id:
                 msg["text"] = new_text
                 msg["edited"] = True
                 break
-        save_messages()
+        
+        save_all_messages(current_messages)
+        st.session_state.messages = current_messages
         return True
     except Exception as e:
-        st.error(f"Error editing message: {e}")
+        st.error(f"Error: {e}")
         return False
 
-# Authentication functions
+# ==================== AUTHENTICATION ====================
+
 def sign_up(username, password, confirm):
     if not username or not password:
         return False, "Please fill all fields"
@@ -254,7 +371,7 @@ def sign_up(username, password, confirm):
     profiles[username] = {"bio": "", "avatar": None, "wallpaper": DEFAULT_WALLPAPER}
     save_profiles(profiles)
     
-    return True, "Account created successfully! Please sign in."
+    return True, "Account created! Please sign in."
 
 def sign_in(username, password):
     users = load_users()
@@ -275,7 +392,8 @@ def sign_out():
     st.session_state.replying_to = None
     st.rerun()
 
-# Initialize session state
+# ==================== SESSION STATE ====================
+
 if 'initialized' not in st.session_state:
     st.session_state.messages = load_messages()
     st.session_state.authenticated = False
@@ -285,28 +403,31 @@ if 'initialized' not in st.session_state:
     st.session_state.editing_msg_id = None
     st.session_state.replying_to = None
     st.session_state.initialized = True
+    st.session_state.message_count = len(st.session_state.messages)
 
-# Load wallpaper from profile if authenticated
+# Periodic refresh for new messages
+if st.session_state.get('authenticated', False):
+    current_messages = load_messages()
+    if len(current_messages) != st.session_state.get('message_count', 0):
+        st.session_state.messages = current_messages
+        st.session_state.message_count = len(current_messages)
+
 if st.session_state.get('authenticated', False):
     profile_data = get_user_profile(st.session_state.username)
     st.session_state.wallpaper = profile_data.get("wallpaper", DEFAULT_WALLPAPER)
 
 wallpaper_url = WALLPAPERS.get(st.session_state.wallpaper, WALLPAPERS[DEFAULT_WALLPAPER])
 
-# Custom CSS
+# ==================== CUSTOM CSS ====================
+
 st.markdown(f"""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
     
-    * {{
-        font-family: 'Inter', sans-serif;
-    }}
-    
-    /* Hide Streamlit default elements */
+    * {{ font-family: 'Inter', sans-serif; }}
     #MainMenu {{visibility: hidden;}}
     footer {{visibility: hidden;}}
     
-    /* Main app background */
     .stApp {{
         background-image: url("{wallpaper_url}");
         background-size: cover;
@@ -326,17 +447,6 @@ st.markdown(f"""
         z-index: -1;
     }}
     
-    /* Chat container */
-    .chat-container {{
-        background: rgba(30, 41, 59, 0.7);
-        backdrop-filter: blur(20px);
-        border-radius: 1.5rem;
-        border: 1px solid rgba(255, 255, 255, 0.1);
-        padding: 1rem;
-        margin-bottom: 1rem;
-    }}
-    
-    /* Message styling */
     .message-bubble {{
         background: rgba(255, 255, 255, 0.1);
         backdrop-filter: blur(10px);
@@ -344,6 +454,12 @@ st.markdown(f"""
         border-radius: 1rem;
         border: 1px solid rgba(255, 255, 255, 0.1);
         margin-bottom: 0.5rem;
+        animation: fadeIn 0.3s ease;
+    }}
+    
+    @keyframes fadeIn {{
+        from {{ opacity: 0; transform: translateY(10px); }}
+        to {{ opacity: 1; transform: translateY(0); }}
     }}
     
     .message-own {{
@@ -351,17 +467,11 @@ st.markdown(f"""
         border-color: rgba(102, 126, 234, 0.5);
     }}
     
-    /* Sidebar styling */
     section[data-testid="stSidebar"] {{
         background: rgba(15, 23, 42, 0.95) !important;
         backdrop-filter: blur(20px);
     }}
     
-    section[data-testid="stSidebar"] > div {{
-        padding-top: 2rem;
-    }}
-    
-    /* Button styling */
     .stButton > button {{
         background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
         color: white;
@@ -378,27 +488,7 @@ st.markdown(f"""
         box-shadow: 0 5px 20px rgba(102, 126, 234, 0.4);
     }}
     
-    /* Secondary button */
-    .stButton > button[kind="secondary"] {{
-        background: rgba(255, 255, 255, 0.1);
-        border: 1px solid rgba(255, 255, 255, 0.2);
-    }}
-    
-    /* Input styling */
-    .stTextInput > div > div > input {{
-        background: rgba(255, 255, 255, 0.95);
-        color: #1e293b;
-        border: 1px solid rgba(102, 126, 234, 0.3);
-        border-radius: 1rem;
-        padding: 0.7rem 1rem;
-    }}
-    
-    .stTextInput > div > div > input:focus {{
-        border-color: #667eea;
-        box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.2);
-    }}
-    
-    /* Text area */
+    .stTextInput > div > div > input,
     .stTextArea > div > div > textarea {{
         background: rgba(255, 255, 255, 0.95);
         color: #1e293b;
@@ -407,7 +497,6 @@ st.markdown(f"""
         padding: 0.7rem 1rem;
     }}
     
-    /* Profile card */
     .profile-card {{
         background: rgba(30, 41, 59, 0.7);
         backdrop-filter: blur(20px);
@@ -417,7 +506,6 @@ st.markdown(f"""
         text-align: center;
     }}
     
-    /* Theme cards */
     .theme-card {{
         border-radius: 1rem;
         overflow: hidden;
@@ -427,53 +515,31 @@ st.markdown(f"""
         margin-bottom: 0.5rem;
     }}
     
-    .theme-card:hover {{
-        border-color: #667eea;
-        transform: scale(1.05);
+    .theme-card:hover {{ transform: scale(1.05); }}
+    .theme-card.selected {{ border-color: #667eea; box-shadow: 0 0 20px rgba(102, 126, 234, 0.4); }}
+    
+    ::-webkit-scrollbar {{ width: 6px; }}
+    ::-webkit-scrollbar-track {{ background: rgba(255, 255, 255, 0.05); }}
+    ::-webkit-scrollbar-thumb {{ background: linear-gradient(135deg, #667eea, #764ba2); border-radius: 3px; }}
+    
+    .status-badge {{
+        position: fixed;
+        top: 10px;
+        right: 10px;
+        padding: 0.4rem 1rem;
+        border-radius: 1rem;
+        font-size: 0.75rem;
+        z-index: 1000;
+        font-weight: 600;
     }}
     
-    .theme-card.selected {{
-        border-color: #667eea;
-        box-shadow: 0 0 20px rgba(102, 126, 234, 0.4);
-    }}
-    
-    /* Scrollbar */
-    ::-webkit-scrollbar {{
-        width: 6px;
-    }}
-    
-    ::-webkit-scrollbar-track {{
-        background: rgba(255, 255, 255, 0.05);
-    }}
-    
-    ::-webkit-scrollbar-thumb {{
-        background: linear-gradient(135deg, #667eea, #764ba2);
-        border-radius: 3px;
-    }}
-    
-    /* Divider */
-    hr {{
-        border-color: rgba(255, 255, 255, 0.1);
-    }}
-    
-    /* Metric cards */
-    [data-testid="stMetric"] {{
-        background: rgba(255, 255, 255, 0.1);
-        padding: 0.5rem;
-        border-radius: 0.5rem;
-    }}
-    
-    [data-testid="stMetric"] label {{
-        color: #94a3b8 !important;
-    }}
-    
-    [data-testid="stMetric"] div {{
-        color: white !important;
-    }}
+    .status-connected {{ background: rgba(16, 185, 129, 0.2); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.3); }}
+    .status-local {{ background: rgba(251, 191, 36, 0.2); color: #fbbf24; border: 1px solid rgba(251, 191, 36, 0.3); }}
 </style>
 """, unsafe_allow_html=True)
 
-# ============ AUTH PAGE ============
+# ==================== AUTH PAGE ====================
+
 if not st.session_state.authenticated:
     col1, col2, col3 = st.columns([1, 2, 1])
     
@@ -499,6 +565,8 @@ if not st.session_state.authenticated:
                     if success:
                         st.session_state.authenticated = True
                         st.session_state.username = result
+                        st.session_state.messages = load_messages()
+                        st.session_state.message_count = len(st.session_state.messages)
                         st.success(f"Welcome back, {result}!")
                         time.sleep(0.5)
                         st.rerun()
@@ -519,9 +587,23 @@ if not st.session_state.authenticated:
                     else:
                         st.error(msg)
 
-# ============ MAIN APP ============
+# ==================== MAIN APP ====================
+
 else:
-    # Sidebar content
+    # Status badge
+    status_class = "status-connected" if USE_CLOUD else "status-local"
+    status_text = CLOUD_TYPE
+    st.markdown(f'<div class="status-badge {status_class}">{status_text}</div>', unsafe_allow_html=True)
+    
+    # Refresh button
+    col_refresh, col_space = st.columns([1, 10])
+    with col_refresh:
+        if st.button("🔄", key="refresh_btn", help="Refresh messages"):
+            st.session_state.messages = load_messages()
+            st.session_state.message_count = len(st.session_state.messages)
+            st.rerun()
+    
+    # Sidebar
     with st.sidebar:
         st.markdown("""
         <div style="text-align: center; margin-bottom: 2rem;">
@@ -530,7 +612,6 @@ else:
         </div>
         """, unsafe_allow_html=True)
         
-        # User avatar and info
         profile_data = get_user_profile(st.session_state.username)
         avatar_html = get_avatar_html(st.session_state.username, 80)
         st.markdown(f"""
@@ -542,14 +623,12 @@ else:
         """, unsafe_allow_html=True)
         
         st.divider()
-        
-        # Navigation buttons
         st.markdown("### 📱 Navigation")
         
-        # Use regular buttons without type parameter to avoid errors
         if st.button("💬 Chat Room", use_container_width=True, key="nav_chat"):
             st.session_state.current_view = "chat"
             st.session_state.editing_msg_id = None
+            st.session_state.messages = load_messages()
             st.rerun()
         
         if st.button("👤 Profile Settings", use_container_width=True, key="nav_profile"):
@@ -561,9 +640,8 @@ else:
             st.rerun()
         
         st.divider()
-        
-        # Stats
         st.markdown("### 📊 Community Stats")
+        
         total_messages = len(st.session_state.messages)
         unique_users = len(set(m["username"] for m in st.session_state.messages)) if st.session_state.messages else 0
         
@@ -573,27 +651,24 @@ else:
         with col2:
             st.metric("Members", unique_users)
         
+        if st.session_state.messages:
+            st.markdown("### 🟢 Recent Users")
+            recent = list(dict.fromkeys([m["username"] for m in reversed(st.session_state.messages)]))[:5]
+            for user in recent:
+                st.markdown(f"• {user}")
+        
         st.divider()
         
-        # Sign out
+        if not USE_CLOUD:
+            st.warning("⚠️ Add JSONBin keys in Secrets for cross-device chat!")
+        
         if st.button("🚪 Sign Out", use_container_width=True):
             sign_out()
     
     # Main content area
     if st.session_state.current_view == "chat":
-        # ============ CHAT VIEW ============
+        st.markdown('<h2 style="color: white; margin-bottom: 1rem;">💬 Community Chat</h2>', unsafe_allow_html=True)
         
-        # Chat header
-        st.markdown("""
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
-            <h2 style="color: white; margin: 0;">💬 Community Chat</h2>
-            <div style="background: rgba(16, 185, 129, 0.2); padding: 0.5rem 1rem; border-radius: 1rem; color: #10b981;">
-                🟢 Online
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
-        
-        # Messages container
         if not st.session_state.messages:
             st.markdown("""
             <div style="text-align: center; padding: 3rem; color: #94a3b8;">
@@ -603,16 +678,13 @@ else:
             </div>
             """, unsafe_allow_html=True)
         else:
-            # Display last 50 messages
             for msg in st.session_state.messages[-50:]:
                 is_own = msg["username"] == st.session_state.username
                 msg_id = msg.get("id", "")
                 
-                # Check if editing
                 if st.session_state.get("editing_msg_id") == msg_id:
                     with st.form(key=f"edit_{msg_id}"):
-                        st.text_input("Edit message", value=msg['text'], key=f"input_{msg_id}", label_visibility="collapsed")
-                        new_text = st.session_state[f"input_{msg_id}"]
+                        new_text = st.text_input("Edit", value=msg['text'], key=f"input_{msg_id}", label_visibility="collapsed")
                         c1, c2 = st.columns(2)
                         with c1:
                             if st.form_submit_button("💾 Save", use_container_width=True):
@@ -624,7 +696,6 @@ else:
                                 st.session_state.editing_msg_id = None
                                 st.rerun()
                 else:
-                    # Message display
                     col1, col2 = st.columns([1, 20])
                     
                     with col1:
@@ -640,59 +711,53 @@ else:
                         </div>
                         """, unsafe_allow_html=True)
                         
-                        # Action buttons
                         cols = st.columns([1, 1, 1, 1, 1, 10])
                         
                         with cols[0]:
-                            if st.button("👍", key=f"like_{msg_id}", help="Like"):
+                            if st.button("👍", key=f"like_{msg_id}"):
                                 add_reaction(msg_id, "👍")
                                 st.rerun()
-                        
                         with cols[1]:
-                            if st.button("❤️", key=f"love_{msg_id}", help="Love"):
+                            if st.button("❤️", key=f"love_{msg_id}"):
                                 add_reaction(msg_id, "❤️")
                                 st.rerun()
-                        
                         with cols[2]:
-                            if st.button("😂", key=f"laugh_{msg_id}", help="Haha"):
+                            if st.button("😂", key=f"laugh_{msg_id}"):
                                 add_reaction(msg_id, "😂")
                                 st.rerun()
-                        
                         with cols[3]:
-                            if st.button("↩️", key=f"reply_{msg_id}", help="Reply"):
+                            if st.button("↩️", key=f"reply_{msg_id}"):
                                 st.session_state.replying_to = msg_id
                                 st.rerun()
-                        
                         if is_own:
                             with cols[4]:
-                                if st.button("✏️", key=f"editbtn_{msg_id}", help="Edit"):
+                                if st.button("✏️", key=f"editbtn_{msg_id}"):
                                     st.session_state.editing_msg_id = msg_id
                                     st.rerun()
                         
-                        # Show reactions
                         if msg.get("reactions"):
                             reaction_html = '<div style="margin-top: 0.3rem; display: flex; gap: 0.3rem; flex-wrap: wrap;">'
                             for emoji, users in msg["reactions"].items():
                                 count = len(users)
-                                is_user_reacted = st.session_state.username in users
-                                reaction_html += f'<span style="background: rgba(255, 255, 255, {0.3 if is_user_reacted else 0.1}); padding: 0.1rem 0.5rem; border-radius: 1rem; font-size: 0.8rem; border: 1px solid rgba(255, 255, 255, {0.5 if is_user_reacted else 0.2});">{emoji} {count}</span>'
+                                is_user = st.session_state.username in users
+                                opacity = "0.3" if is_user else "0.1"
+                                border = "0.5" if is_user else "0.2"
+                                reaction_html += f'<span style="background: rgba(255,255,255,{opacity}); padding: 0.1rem 0.5rem; border-radius: 1rem; font-size: 0.8rem; border: 1px solid rgba(255,255,255,{border});">{emoji} {count}</span>'
                             reaction_html += '</div>'
                             st.markdown(reaction_html, unsafe_allow_html=True)
                         
-                        # Delete button for own messages
                         if is_own:
                             if st.button("🗑️ Delete", key=f"delete_{msg_id}"):
                                 if delete_message(msg_id):
                                     st.rerun()
         
-        # Reply indicator
         if st.session_state.get("replying_to"):
             reply_msg = next((m for m in st.session_state.messages if m.get("id") == st.session_state.replying_to), None)
             if reply_msg:
                 col1, col2 = st.columns([10, 1])
                 with col1:
                     st.markdown(f"""
-                    <div style="background: rgba(102, 126, 234, 0.2); padding: 0.5rem 1rem; border-radius: 0.5rem; margin-bottom: 0.5rem; color: #94a3b8;">
+                    <div style="background: rgba(102,126,234,0.2); padding: 0.5rem 1rem; border-radius: 0.5rem; margin-bottom: 0.5rem; color: #94a3b8;">
                         ↩️ Replying to <strong style="color: white;">{sanitize_html(reply_msg['username'])}</strong>: {sanitize_html(reply_msg['text'][:50])}...
                     </div>
                     """, unsafe_allow_html=True)
@@ -701,7 +766,6 @@ else:
                         st.session_state.replying_to = None
                         st.rerun()
         
-        # Message input
         st.divider()
         with st.form("message_form", clear_on_submit=True):
             col1, col2 = st.columns([6, 1])
@@ -717,10 +781,10 @@ else:
             
             if submitted and msg_text and msg_text.strip():
                 if send_message(msg_text):
+                    st.session_state.message_count = len(st.session_state.messages)
                     st.rerun()
     
     elif st.session_state.current_view == "profile":
-        # ============ PROFILE VIEW ============
         st.markdown('<h2 style="color: white;">👤 Profile Settings</h2>', unsafe_allow_html=True)
         
         col1, col2 = st.columns([1, 2])
@@ -731,8 +795,6 @@ else:
             st.markdown(avatar_html, unsafe_allow_html=True)
             st.markdown(f"<h3 style='color: white;'>@{st.session_state.username}</h3>", unsafe_allow_html=True)
             st.markdown('</div>', unsafe_allow_html=True)
-            
-            # Upload avatar
             avatar_file = st.file_uploader("Upload Avatar", type=['png', 'jpg', 'jpeg'])
         
         with col2:
@@ -749,18 +811,15 @@ else:
                             st.success("Profile updated!")
                             time.sleep(1)
                             st.rerun()
-                
                 with col_b:
                     if st.form_submit_button("↩️ Back to Chat", use_container_width=True):
                         st.session_state.current_view = "chat"
                         st.rerun()
     
     elif st.session_state.current_view == "themes":
-        # ============ THEMES VIEW ============
         st.markdown('<h2 style="color: white;">🎨 Choose Theme</h2>', unsafe_allow_html=True)
-        st.markdown('<p style="color: #94a3b8; margin-bottom: 1rem;">Select a wallpaper for your chat experience</p>', unsafe_allow_html=True)
+        st.markdown('<p style="color: #94a3b8; margin-bottom: 1rem;">Pick a wallpaper for your chat</p>', unsafe_allow_html=True)
         
-        # Display themes in grid
         for i, (theme_name, theme_url) in enumerate(WALLPAPERS.items()):
             if i % 4 == 0:
                 cols = st.columns(4)
@@ -787,3 +846,13 @@ else:
         if st.button("↩️ Back to Chat", use_container_width=True, key="back_from_themes"):
             st.session_state.current_view = "chat"
             st.rerun()
+
+# Auto-refresh
+if st.session_state.get('authenticated', False):
+    st.markdown("""
+    <script>
+        setTimeout(function() {
+            window.location.reload();
+        }, 2000);
+    </script>
+    """, unsafe_allow_html=True)
