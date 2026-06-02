@@ -42,7 +42,10 @@ UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
 
 # ==================== 40+ WALLPAPERS ====================
 WALLPAPERS = {
-    # Original 8
+    # Default wallpaper (colorful gradient - generated via CSS)
+    "🌈 Colorful Gradient": "gradient_default",
+    
+    # Unsplash wallpapers
     "✨ Abstract Purple": "https://images.unsplash.com/photo-1557682250-33bd709cbe85?w=1920&q=80",
     "🌌 Cosmic Nebula": "https://images.unsplash.com/photo-1534796636912-3b95b3ab5986?w=1920&q=80",
     "🌊 Ocean Waves": "https://images.unsplash.com/photo-1505118380757-91f5f5632de0?w=1920&q=80",
@@ -51,8 +54,6 @@ WALLPAPERS = {
     "🌅 Golden Sunset": "https://images.unsplash.com/photo-1534274988757-a28bf1a57c17?w=1920&q=80",
     "🌿 Forest Mist": "https://images.unsplash.com/photo-1470071459604-3b5ec3a7fe05?w=1920&q=80",
     "🏙️ City Lights": "https://images.unsplash.com/photo-1477959858617-67f85cf4f1df?w=1920&q=80",
-    
-    # New 32+ wallpapers
     "🔥 Fiery Lava": "https://images.unsplash.com/photo-1550745165-9bc0b252726f?w=1920&q=80",
     "🎨 Cyberpunk Neon": "https://images.unsplash.com/photo-1515634928625-85bc09c9cbba?w=1920&q=80",
     "🏝️ Tropical Beach": "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=1920&q=80",
@@ -87,20 +88,16 @@ WALLPAPERS = {
     "🌅 Sunset Silhouette": "https://images.unsplash.com/photo-1493809842364-78817add7ffb?w=1920&q=80",
 }
 
-DEFAULT_WALLPAPER = "✨ Abstract Purple"
+DEFAULT_WALLPAPER = "🌈 Colorful Gradient"
 
 # ==================== CLOUD DATABASE FUNCTIONS ====================
 
 def load_from_jsonbin():
-    """Load messages from JSONBin cloud database"""
     if not USE_CLOUD:
         return None
     try:
         url = f"https://api.jsonbin.io/v3/b/{JSONBIN_BIN_ID}/latest"
-        headers = {
-            "X-Master-Key": JSONBIN_API_KEY,
-            "X-Bin-Meta": "false"
-        }
+        headers = {"X-Master-Key": JSONBIN_API_KEY, "X-Bin-Meta": "false"}
         response = requests.get(url, headers=headers, timeout=5)
         if response.status_code == 200:
             data = response.json()
@@ -111,11 +108,10 @@ def load_from_jsonbin():
         elif response.status_code == 404:
             create_bin()
         return None
-    except Exception as e:
+    except:
         return None
 
 def save_to_jsonbin(messages):
-    """Save messages to JSONBin cloud database"""
     if not USE_CLOUD:
         return False
     try:
@@ -128,11 +124,10 @@ def save_to_jsonbin(messages):
         data = {"messages": messages}
         response = requests.put(url, json=data, headers=headers, timeout=5)
         return response.status_code in [200, 201]
-    except Exception as e:
+    except:
         return False
 
 def create_bin():
-    """Create a new bin if it doesn't exist"""
     try:
         url = "https://api.jsonbin.io/v3/b"
         headers = {
@@ -141,15 +136,14 @@ def create_bin():
             "X-Bin-Name": "chattier-messages",
             "X-Bin-Private": "false"
         }
-        data = {"messages": []}
-        response = requests.post(url, json=data, headers=headers, timeout=5)
+        response = requests.post(url, json={"messages": []}, headers=headers, timeout=5)
         if response.status_code in [200, 201]:
             result = response.json()
             new_bin_id = result.get("metadata", {}).get("id", "")
             if new_bin_id:
                 save_json(pathlib.Path("data/bin_id.json"), {"bin_id": new_bin_id})
                 return True
-    except Exception as e:
+    except:
         pass
     return False
 
@@ -168,7 +162,7 @@ def load_json(path, default=None):
         if path.exists():
             with open(path, 'r', encoding='utf-8') as f:
                 return json.load(f)
-    except Exception:
+    except:
         pass
     return default if default is not None else {}
 
@@ -178,7 +172,7 @@ def save_json(path, data):
         with open(path, 'w', encoding='utf-8') as f:
             json.dump(data, f, indent=2, ensure_ascii=False)
         return True
-    except Exception:
+    except:
         return False
 
 def load_users():
@@ -245,7 +239,7 @@ def get_avatar_html(username, size=40):
                 avatar_bytes = f.read()
             avatar_b64 = base64.b64encode(avatar_bytes).decode()
             return f'<img src="data:image/jpeg;base64,{avatar_b64}" style="width:{size}px;height:{size}px;border-radius:50%;object-fit:cover;" />'
-    except Exception:
+    except:
         pass
     
     colors = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7', '#DDA0DD', '#98D8C8', '#F7B787',
@@ -256,22 +250,17 @@ def get_avatar_html(username, size=40):
     return f'<div style="width:{size}px;height:{size}px;border-radius:50%;background:{bg_color};display:flex;align-items:center;justify-content:center;font-weight:700;color:white;font-size:{size*0.4}px;">{letter}</div>'
 
 def load_messages():
-    """Load messages - try cloud first, then local"""
     if USE_CLOUD:
         cloud_messages = load_from_jsonbin()
         if cloud_messages is not None:
             return cloud_messages
-    
     return load_json(MESSAGES_FILE, [])
 
 def save_all_messages(messages):
-    """Save messages to cloud and local backup"""
     if len(messages) > 500:
         messages = messages[-500:]
-    
     if USE_CLOUD:
         save_to_jsonbin(messages)
-    
     save_json(MESSAGES_FILE, messages)
     return True
 
@@ -291,7 +280,7 @@ def format_time(ts):
         elif diff.days < 7:
             return f"{diff.days}d ago"
         return t.strftime("%b %d, %I:%M %p")
-    except Exception:
+    except:
         return ""
 
 def send_message(text):
@@ -339,7 +328,7 @@ def add_reaction(msg_id, emoji):
         save_all_messages(current_messages)
         st.session_state.messages = current_messages
         return True
-    except Exception:
+    except:
         return False
 
 def delete_message(msg_id):
@@ -349,7 +338,7 @@ def delete_message(msg_id):
         save_all_messages(current_messages)
         st.session_state.messages = current_messages
         return True
-    except Exception:
+    except:
         return False
 
 def edit_message(msg_id, new_text):
@@ -368,7 +357,7 @@ def edit_message(msg_id, new_text):
         save_all_messages(current_messages)
         st.session_state.messages = current_messages
         return True
-    except Exception:
+    except:
         return False
 
 # ==================== AUTHENTICATION ====================
@@ -429,10 +418,10 @@ if 'initialized' not in st.session_state:
     st.session_state.current_view = "chat"
     st.session_state.editing_msg_id = None
     st.session_state.replying_to = None
+    st.session_state.sidebar_state = "expanded"
     st.session_state.initialized = True
     st.session_state.message_count = len(st.session_state.messages)
 
-# Ultra-fast refresh - check for new messages
 if st.session_state.get('authenticated', False):
     current_messages = load_messages()
     if len(current_messages) != st.session_state.get('message_count', 0):
@@ -447,6 +436,19 @@ wallpaper_url = WALLPAPERS.get(st.session_state.wallpaper, WALLPAPERS[DEFAULT_WA
 
 # ==================== CUSTOM CSS ====================
 
+# Handle default gradient wallpaper
+if wallpaper_url == "gradient_default":
+    wallpaper_css = """
+        background: linear-gradient(135deg, 
+            #667eea 0%, #764ba2 25%, #f093fb 50%, #f5576c 75%, #4facfe 100%);
+        background-size: 400% 400%;
+        animation: gradientShift 15s ease infinite;
+    """
+    wallpaper_overlay = "background: rgba(0, 0, 0, 0.3);"
+else:
+    wallpaper_css = f'background-image: url("{wallpaper_url}"); background-size: cover; background-position: center; background-attachment: fixed;'
+    wallpaper_overlay = "background: rgba(0, 0, 0, 0.55); backdrop-filter: blur(8px);"
+
 st.markdown(f"""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
@@ -455,12 +457,20 @@ st.markdown(f"""
     #MainMenu {{visibility: hidden;}}
     footer {{visibility: hidden;}}
     
+    /* Animated gradient keyframes */
+    @keyframes gradientShift {{
+        0% {{ background-position: 0% 50%; }}
+        50% {{ background-position: 100% 50%; }}
+        100% {{ background-position: 0% 50%; }}
+    }}
+    
+    @keyframes sidebarGlow {{
+        0%, 100% {{ box-shadow: 0 0 20px rgba(102, 126, 234, 0.3); }}
+        50% {{ box-shadow: 0 0 40px rgba(240, 147, 251, 0.5), 0 0 60px rgba(102, 126, 234, 0.3); }}
+    }}
+    
     .stApp {{
-        background-image: url("{wallpaper_url}");
-        background-size: cover;
-        background-position: center;
-        background-attachment: fixed;
-        transition: background-image 0.5s ease;
+        {wallpaper_css}
     }}
     
     .stApp::before {{
@@ -470,9 +480,46 @@ st.markdown(f"""
         left: 0;
         width: 100%;
         height: 100%;
-        background: rgba(0, 0, 0, 0.55);
-        backdrop-filter: blur(8px);
+        {wallpaper_overlay}
         z-index: -1;
+    }}
+    
+    /* Colorful Gradient Sidebar */
+    section[data-testid="stSidebar"] {{
+        background: linear-gradient(180deg, 
+            rgba(102, 126, 234, 0.95) 0%,
+            rgba(118, 75, 162, 0.95) 20%,
+            rgba(240, 147, 251, 0.9) 40%,
+            rgba(245, 87, 108, 0.9) 60%,
+            rgba(79, 172, 254, 0.95) 80%,
+            rgba(102, 126, 234, 0.95) 100%) !important;
+        backdrop-filter: blur(20px);
+        animation: sidebarGlow 3s ease-in-out infinite;
+        border-right: 2px solid rgba(255, 255, 255, 0.2) !important;
+    }}
+    
+    section[data-testid="stSidebar"] * {{
+        color: white !important;
+    }}
+    
+    section[data-testid="stSidebar"] .stButton > button {{
+        background: rgba(255, 255, 255, 0.2) !important;
+        border: 2px solid rgba(255, 255, 255, 0.4) !important;
+        color: white !important;
+        backdrop-filter: blur(10px);
+        font-weight: 600 !important;
+        transition: all 0.3s ease !important;
+    }}
+    
+    section[data-testid="stSidebar"] .stButton > button:hover {{
+        background: rgba(255, 255, 255, 0.4) !important;
+        border-color: rgba(255, 255, 255, 0.8) !important;
+        transform: translateY(-2px);
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+    }}
+    
+    section[data-testid="stSidebar"] hr {{
+        border-color: rgba(255, 255, 255, 0.3) !important;
     }}
     
     .message-bubble {{
@@ -504,11 +551,6 @@ st.markdown(f"""
         background: linear-gradient(135deg, rgba(102, 126, 234, 0.4), rgba(118, 75, 162, 0.4));
     }}
     
-    section[data-testid="stSidebar"] {{
-        background: rgba(15, 23, 42, 0.95) !important;
-        backdrop-filter: blur(20px);
-    }}
-    
     .stButton > button {{
         background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
         color: white;
@@ -535,11 +577,11 @@ st.markdown(f"""
     }}
     
     .profile-card {{
-        background: rgba(30, 41, 59, 0.7);
+        background: linear-gradient(135deg, rgba(102, 126, 234, 0.3), rgba(240, 147, 251, 0.3));
         backdrop-filter: blur(20px);
         border-radius: 1.5rem;
         padding: 2rem;
-        border: 1px solid rgba(255, 255, 255, 0.1);
+        border: 2px solid rgba(255, 255, 255, 0.2);
         text-align: center;
     }}
     
@@ -576,8 +618,16 @@ st.markdown(f"""
         50% {{ opacity: 0.7; }}
     }}
     
-    .status-connected {{ background: rgba(16, 185, 129, 0.2); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.3); }}
-    .status-local {{ background: rgba(251, 191, 36, 0.2); color: #fbbf24; border: 1px solid rgba(251, 191, 36, 0.3); }}
+    .status-connected {{ 
+        background: linear-gradient(135deg, rgba(16, 185, 129, 0.3), rgba(79, 172, 254, 0.3)); 
+        color: #10b981; 
+        border: 1px solid rgba(16, 185, 129, 0.5); 
+    }}
+    .status-local {{ 
+        background: linear-gradient(135deg, rgba(251, 191, 36, 0.3), rgba(245, 87, 108, 0.3)); 
+        color: #fbbf24; 
+        border: 1px solid rgba(251, 191, 36, 0.5); 
+    }}
     
     .live-indicator {{
         display: inline-block;
@@ -596,6 +646,36 @@ st.markdown(f"""
 </style>
 """, unsafe_allow_html=True)
 
+# ==================== SIDEBAR COLLAPSE SCRIPT ====================
+st.markdown("""
+<script>
+    // Function to collapse sidebar
+    function collapseSidebar() {
+        const sidebar = parent.document.querySelector('[data-testid="stSidebar"]');
+        if (sidebar) {
+            const button = sidebar.querySelector('button[kind="header"]');
+            if (button) {
+                button.click();
+            }
+        }
+    }
+    
+    // Add click listeners to navigation buttons
+    setTimeout(() => {
+        const buttons = parent.document.querySelectorAll('[data-testid="stSidebar"] button');
+        buttons.forEach(button => {
+            if (button.textContent.includes('Chat Room') || 
+                button.textContent.includes('Profile Settings') || 
+                button.textContent.includes('Themes')) {
+                button.addEventListener('click', () => {
+                    setTimeout(collapseSidebar, 300);
+                });
+            }
+        });
+    }, 1000);
+</script>
+""", unsafe_allow_html=True)
+
 # ==================== AUTH PAGE ====================
 
 if not st.session_state.authenticated:
@@ -604,10 +684,16 @@ if not st.session_state.authenticated:
     with col2:
         st.markdown("""
         <div style="text-align: center; padding: 2rem 0;">
-            <div style="font-size: 4rem; margin-bottom: 1rem;">💬</div>
-            <h1 style="color: white; margin-bottom: 0.5rem;">Chattier</h1>
+            <div style="font-size: 4rem; margin-bottom: 1rem; animation: float 3s ease-in-out infinite;">💬</div>
+            <h1 style="color: white; margin-bottom: 0.5rem; background: linear-gradient(135deg, #667eea, #764ba2, #f093fb); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">Chattier</h1>
             <p style="color: #94a3b8; margin-bottom: 2rem;">Community Forum</p>
         </div>
+        <style>
+            @keyframes float {{
+                0%, 100% {{ transform: translateY(0px); }}
+                50% {{ transform: translateY(-10px); }}
+            }}
+        </style>
         """, unsafe_allow_html=True)
         
         tab1, tab2 = st.tabs(["🔑 Sign In", "✨ Create Account"])
@@ -648,7 +734,7 @@ if not st.session_state.authenticated:
 # ==================== MAIN APP ====================
 
 else:
-    # Status badge with live indicator
+    # Status badge
     status_class = "status-connected" if USE_CLOUD else "status-local"
     st.markdown(f"""
     <div class="status-badge {status_class}">
@@ -668,8 +754,8 @@ else:
     with st.sidebar:
         st.markdown("""
         <div style="text-align: center; margin-bottom: 2rem;">
-            <div style="font-size: 3rem;">💬</div>
-            <h2 style="color: white; margin: 0.5rem 0;">Chattier</h2>
+            <div style="font-size: 3rem; filter: drop-shadow(0 0 10px rgba(255,255,255,0.5));">💬</div>
+            <h2 style="color: white; margin: 0.5rem 0; text-shadow: 0 0 20px rgba(255,255,255,0.3);">Chattier</h2>
         </div>
         """, unsafe_allow_html=True)
         
@@ -678,8 +764,8 @@ else:
         st.markdown(f"""
         <div style="text-align: center; margin-bottom: 1.5rem;">
             {avatar_html}
-            <h3 style="color: white; margin: 0.5rem 0;">@{st.session_state.username}</h3>
-            <p style="color: #94a3b8; font-size: 0.8rem;">{sanitize_html(profile_data.get('bio', 'No bio yet'))[:80]}</p>
+            <h3 style="color: white; margin: 0.5rem 0; text-shadow: 0 2px 10px rgba(0,0,0,0.3);">@{st.session_state.username}</h3>
+            <p style="color: rgba(255,255,255,0.9); font-size: 0.8rem;">{sanitize_html(profile_data.get('bio', 'No bio yet'))[:80]}</p>
         </div>
         """, unsafe_allow_html=True)
         
@@ -881,7 +967,6 @@ else:
         st.markdown('<h2 style="color: white;">🎨 Choose Theme</h2>', unsafe_allow_html=True)
         st.markdown(f'<p style="color: #94a3b8; margin-bottom: 1rem;">{len(WALLPAPERS)} beautiful wallpapers available</p>', unsafe_allow_html=True)
         
-        # Search/filter themes
         search = st.text_input("🔍 Search themes", placeholder="Type to filter...")
         
         filtered_wallpapers = WALLPAPERS
@@ -898,11 +983,20 @@ else:
                 
                 with cols[i % 4]:
                     is_selected = theme_name == st.session_state.wallpaper
-                    st.markdown(f"""
-                    <div class="theme-card {'selected' if is_selected else ''}">
-                        <img src="{theme_url}" style="width: 100%; height: 120px; object-fit: cover;" />
-                    </div>
-                    """, unsafe_allow_html=True)
+                    
+                    # Show gradient preview for default wallpaper
+                    if theme_url == "gradient_default":
+                        st.markdown(f"""
+                        <div class="theme-card {'selected' if is_selected else ''}" style="background: linear-gradient(135deg, #667eea, #764ba2, #f093fb, #f5576c, #4facfe); height: 120px; display: flex; align-items: center; justify-content: center;">
+                            <span style="color: white; font-size: 2rem; text-shadow: 0 0 20px rgba(255,255,255,0.5);">🌈</span>
+                        </div>
+                        """, unsafe_allow_html=True)
+                    else:
+                        st.markdown(f"""
+                        <div class="theme-card {'selected' if is_selected else ''}">
+                            <img src="{theme_url}" style="width: 100%; height: 120px; object-fit: cover;" />
+                        </div>
+                        """, unsafe_allow_html=True)
                     
                     if st.button(f"{'✅ ' if is_selected else ''}{theme_name}", key=f"theme_{i}", use_container_width=True):
                         st.session_state.wallpaper = theme_name
@@ -919,13 +1013,11 @@ else:
             st.session_state.current_view = "chat"
             st.rerun()
 
-# Ultra-fast auto-refresh (0.005 seconds = 5ms)
+# Ultra-fast auto-refresh
 if st.session_state.get('authenticated', False):
     st.markdown("""
     <script>
-        // Ultra-fast refresh every 5ms
         setInterval(function() {
-            // Check for new messages via Streamlit's rerun
             window.location.reload();
         }, 5);
     </script>
