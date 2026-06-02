@@ -20,14 +20,12 @@ st.set_page_config(
 )
 
 # ==================== DATABASE CONFIGURATION ====================
-# Load from Streamlit Secrets (for Streamlit Cloud)
 try:
     JSONBIN_API_KEY = st.secrets["jsonbin"]["api_key"]
     JSONBIN_BIN_ID = st.secrets["jsonbin"]["bin_id"]
     USE_CLOUD = True
     CLOUD_TYPE = "☁️ Cloud Connected"
 except:
-    # Try loading from environment variables (for local testing)
     JSONBIN_API_KEY = os.environ.get("JSONBIN_API_KEY", "")
     JSONBIN_BIN_ID = os.environ.get("JSONBIN_BIN_ID", "")
     USE_CLOUD = bool(JSONBIN_API_KEY and JSONBIN_BIN_ID)
@@ -42,8 +40,9 @@ PROFILES_FILE = DATA_DIR / "profiles.json"
 UPLOADS_DIR = DATA_DIR / "uploads"
 UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
 
-# Wallpaper collection
+# ==================== 40+ WALLPAPERS ====================
 WALLPAPERS = {
+    # Original 8
     "✨ Abstract Purple": "https://images.unsplash.com/photo-1557682250-33bd709cbe85?w=1920&q=80",
     "🌌 Cosmic Nebula": "https://images.unsplash.com/photo-1534796636912-3b95b3ab5986?w=1920&q=80",
     "🌊 Ocean Waves": "https://images.unsplash.com/photo-1505118380757-91f5f5632de0?w=1920&q=80",
@@ -52,6 +51,40 @@ WALLPAPERS = {
     "🌅 Golden Sunset": "https://images.unsplash.com/photo-1534274988757-a28bf1a57c17?w=1920&q=80",
     "🌿 Forest Mist": "https://images.unsplash.com/photo-1470071459604-3b5ec3a7fe05?w=1920&q=80",
     "🏙️ City Lights": "https://images.unsplash.com/photo-1477959858617-67f85cf4f1df?w=1920&q=80",
+    
+    # New 32+ wallpapers
+    "🔥 Fiery Lava": "https://images.unsplash.com/photo-1550745165-9bc0b252726f?w=1920&q=80",
+    "🎨 Cyberpunk Neon": "https://images.unsplash.com/photo-1515634928625-85bc09c9cbba?w=1920&q=80",
+    "🏝️ Tropical Beach": "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=1920&q=80",
+    "❄️ Aurora Winter": "https://images.unsplash.com/photo-1483921020237-2ff51e8e4b22?w=1920&q=80",
+    "🍁 Autumn Forest": "https://images.unsplash.com/photo-1504208434309-cb69f4fe52b0?w=1920&q=80",
+    "💜 Lavender Fields": "https://images.unsplash.com/photo-1505409859467-3a796fd5798e?w=1920&q=80",
+    "🌊 Deep Ocean Blue": "https://images.unsplash.com/photo-1559827260-dc66d52bef19?w=1920&q=80",
+    "🏔️ Alpine Peaks": "https://images.unsplash.com/photo-1454496522488-7a8e488e8606?w=1920&q=80",
+    "🌄 Desert Dunes": "https://images.unsplash.com/photo-1509316785289-025f5b846b35?w=1920&q=80",
+    "🌌 Milky Way": "https://images.unsplash.com/photo-1419242902214-272b3f66ee7a?w=1920&q=80",
+    "🌸 Pink Blossoms": "https://images.unsplash.com/photo-1490750967868-88aa4e7c9d7a?w=1920&q=80",
+    "🏞️ Mountain Lake": "https://images.unsplash.com/photo-1501785888041-af3ef285b470?w=1920&q=80",
+    "🌧️ Rainy Window": "https://images.unsplash.com/photo-1499951360447-b19be8fe80f5?w=1920&q=80",
+    "🌻 Sunflower Field": "https://images.unsplash.com/photo-1470506028280-a011fb34b6f7?w=1920&q=80",
+    "🏰 Northern Lights": "https://images.unsplash.com/photo-1483347756197-71ef80e95f73?w=1920&q=80",
+    "🌴 Palm Sunset": "https://images.unsplash.com/photo-1509233725247-49e657c54213?w=1920&q=80",
+    "🎆 Fireworks Night": "https://images.unsplash.com/photo-1498931299472-f7a63a5a1cfa?w=1920&q=80",
+    "🏛️ Ancient Ruins": "https://images.unsplash.com/photo-1469474968028-56623f02e42e?w=1920&q=80",
+    "🌵 Desert Night": "https://images.unsplash.com/photo-1507400492013-162706c8c05e?w=1920&q=80",
+    "🌊 Stormy Sea": "https://images.unsplash.com/photo-1518837695005-2083093ee35b?w=1920&q=80",
+    "🏔️ Snowy Mountains": "https://images.unsplash.com/photo-1519681393784-d120267933ba?w=1920&q=80",
+    "🌅 Purple Dawn": "https://images.unsplash.com/photo-1506898667547-42e22a46e125?w=1920&q=80",
+    "🍂 Autumn Road": "https://images.unsplash.com/photo-1507041957456-9c397ce39c97?w=1920&q=80",
+    "🌺 Tropical Flowers": "https://images.unsplash.com/photo-1465146344425-f00d5f5c8f07?w=1920&q=80",
+    "🌙 Moonlit Mountains": "https://images.unsplash.com/photo-1508739773434-c26b3d09e071?w=1920&q=80",
+    "🏖️ Crystal Clear": "https://images.unsplash.com/photo-1505228395891-9a51e7e86bf6?w=1920&q=80",
+    "🌄 Golden Hour": "https://images.unsplash.com/photo-1495616811223-4d98c6e9c869?w=1920&q=80",
+    "🌿 Bamboo Forest": "https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=1920&q=80",
+    "🏜️ Red Canyon": "https://images.unsplash.com/photo-1474044159687-1ee9f3a51722?w=1920&q=80",
+    "🌊 Turquoise Waves": "https://images.unsplash.com/photo-1505144808419-1957a94ca61e?w=1920&q=80",
+    "🌸 Spring Meadow": "https://images.unsplash.com/photo-1444021465936-c6ca6d1cb1e6?w=1920&q=80",
+    "🌅 Sunset Silhouette": "https://images.unsplash.com/photo-1493809842364-78817add7ffb?w=1920&q=80",
 }
 
 DEFAULT_WALLPAPER = "✨ Abstract Purple"
@@ -68,7 +101,7 @@ def load_from_jsonbin():
             "X-Master-Key": JSONBIN_API_KEY,
             "X-Bin-Meta": "false"
         }
-        response = requests.get(url, headers=headers, timeout=10)
+        response = requests.get(url, headers=headers, timeout=5)
         if response.status_code == 200:
             data = response.json()
             if isinstance(data, list):
@@ -76,11 +109,9 @@ def load_from_jsonbin():
             elif isinstance(data, dict):
                 return data.get("messages", [])
         elif response.status_code == 404:
-            # Bin doesn't exist yet, create it
             create_bin()
         return None
     except Exception as e:
-        print(f"Load error: {e}")
         return None
 
 def save_to_jsonbin(messages):
@@ -95,10 +126,9 @@ def save_to_jsonbin(messages):
             "X-Bin-Versioning": "false"
         }
         data = {"messages": messages}
-        response = requests.put(url, json=data, headers=headers, timeout=10)
+        response = requests.put(url, json=data, headers=headers, timeout=5)
         return response.status_code in [200, 201]
     except Exception as e:
-        print(f"Save error: {e}")
         return False
 
 def create_bin():
@@ -112,16 +142,15 @@ def create_bin():
             "X-Bin-Private": "false"
         }
         data = {"messages": []}
-        response = requests.post(url, json=data, headers=headers, timeout=10)
+        response = requests.post(url, json=data, headers=headers, timeout=5)
         if response.status_code in [200, 201]:
             result = response.json()
             new_bin_id = result.get("metadata", {}).get("id", "")
             if new_bin_id:
-                # Save the new bin ID
                 save_json(pathlib.Path("data/bin_id.json"), {"bin_id": new_bin_id})
                 return True
     except Exception as e:
-        print(f"Create bin error: {e}")
+        pass
     return False
 
 # ==================== HELPER FUNCTIONS ====================
@@ -149,7 +178,7 @@ def save_json(path, data):
         with open(path, 'w', encoding='utf-8') as f:
             json.dump(data, f, indent=2, ensure_ascii=False)
         return True
-    except Exception as e:
+    except Exception:
         return False
 
 def load_users():
@@ -219,7 +248,8 @@ def get_avatar_html(username, size=40):
     except Exception:
         pass
     
-    colors = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7', '#DDA0DD', '#98D8C8', '#F7B787']
+    colors = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7', '#DDA0DD', '#98D8C8', '#F7B787',
+              '#FF8A80', '#B388FF', '#82B1FF', '#B9F6CA', '#FFE57F', '#FF80AB', '#EA80FC', '#8C9EFF']
     color_idx = hash(username) % len(colors)
     bg_color = colors[color_idx]
     letter = username[0].upper() if username else "?"
@@ -309,8 +339,7 @@ def add_reaction(msg_id, emoji):
         save_all_messages(current_messages)
         st.session_state.messages = current_messages
         return True
-    except Exception as e:
-        st.error(f"Error: {e}")
+    except Exception:
         return False
 
 def delete_message(msg_id):
@@ -320,8 +349,7 @@ def delete_message(msg_id):
         save_all_messages(current_messages)
         st.session_state.messages = current_messages
         return True
-    except Exception as e:
-        st.error(f"Error: {e}")
+    except Exception:
         return False
 
 def edit_message(msg_id, new_text):
@@ -340,8 +368,7 @@ def edit_message(msg_id, new_text):
         save_all_messages(current_messages)
         st.session_state.messages = current_messages
         return True
-    except Exception as e:
-        st.error(f"Error: {e}")
+    except Exception:
         return False
 
 # ==================== AUTHENTICATION ====================
@@ -405,7 +432,7 @@ if 'initialized' not in st.session_state:
     st.session_state.initialized = True
     st.session_state.message_count = len(st.session_state.messages)
 
-# Periodic refresh for new messages
+# Ultra-fast refresh - check for new messages
 if st.session_state.get('authenticated', False):
     current_messages = load_messages()
     if len(current_messages) != st.session_state.get('message_count', 0):
@@ -433,6 +460,7 @@ st.markdown(f"""
         background-size: cover;
         background-position: center;
         background-attachment: fixed;
+        transition: background-image 0.5s ease;
     }}
     
     .stApp::before {{
@@ -442,8 +470,8 @@ st.markdown(f"""
         left: 0;
         width: 100%;
         height: 100%;
-        background: rgba(0, 0, 0, 0.6);
-        backdrop-filter: blur(10px);
+        background: rgba(0, 0, 0, 0.55);
+        backdrop-filter: blur(8px);
         z-index: -1;
     }}
     
@@ -454,7 +482,12 @@ st.markdown(f"""
         border-radius: 1rem;
         border: 1px solid rgba(255, 255, 255, 0.1);
         margin-bottom: 0.5rem;
-        animation: fadeIn 0.3s ease;
+        animation: fadeIn 0.2s ease;
+        transition: all 0.3s ease;
+    }}
+    
+    .message-bubble:hover {{
+        background: rgba(255, 255, 255, 0.15);
     }}
     
     @keyframes fadeIn {{
@@ -465,6 +498,10 @@ st.markdown(f"""
     .message-own {{
         background: linear-gradient(135deg, rgba(102, 126, 234, 0.3), rgba(118, 75, 162, 0.3));
         border-color: rgba(102, 126, 234, 0.5);
+    }}
+    
+    .message-own:hover {{
+        background: linear-gradient(135deg, rgba(102, 126, 234, 0.4), rgba(118, 75, 162, 0.4));
     }}
     
     section[data-testid="stSidebar"] {{
@@ -531,10 +568,31 @@ st.markdown(f"""
         font-size: 0.75rem;
         z-index: 1000;
         font-weight: 600;
+        animation: pulse 2s infinite;
+    }}
+    
+    @keyframes pulse {{
+        0%, 100% {{ opacity: 1; }}
+        50% {{ opacity: 0.7; }}
     }}
     
     .status-connected {{ background: rgba(16, 185, 129, 0.2); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.3); }}
     .status-local {{ background: rgba(251, 191, 36, 0.2); color: #fbbf24; border: 1px solid rgba(251, 191, 36, 0.3); }}
+    
+    .live-indicator {{
+        display: inline-block;
+        width: 8px;
+        height: 8px;
+        background: #10b981;
+        border-radius: 50%;
+        margin-right: 0.5rem;
+        animation: livePulse 1s infinite;
+    }}
+    
+    @keyframes livePulse {{
+        0%, 100% {{ box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); }}
+        50% {{ box-shadow: 0 0 0 6px rgba(16, 185, 129, 0); }}
+    }}
 </style>
 """, unsafe_allow_html=True)
 
@@ -590,15 +648,18 @@ if not st.session_state.authenticated:
 # ==================== MAIN APP ====================
 
 else:
-    # Status badge
+    # Status badge with live indicator
     status_class = "status-connected" if USE_CLOUD else "status-local"
-    status_text = CLOUD_TYPE
-    st.markdown(f'<div class="status-badge {status_class}">{status_text}</div>', unsafe_allow_html=True)
+    st.markdown(f"""
+    <div class="status-badge {status_class}">
+        <span class="live-indicator"></span>{CLOUD_TYPE}
+    </div>
+    """, unsafe_allow_html=True)
     
     # Refresh button
     col_refresh, col_space = st.columns([1, 10])
     with col_refresh:
-        if st.button("🔄", key="refresh_btn", help="Refresh messages"):
+        if st.button("🔄", key="refresh_btn", help="Instant refresh"):
             st.session_state.messages = load_messages()
             st.session_state.message_count = len(st.session_state.messages)
             st.rerun()
@@ -667,7 +728,7 @@ else:
     
     # Main content area
     if st.session_state.current_view == "chat":
-        st.markdown('<h2 style="color: white; margin-bottom: 1rem;">💬 Community Chat</h2>', unsafe_allow_html=True)
+        st.markdown('<h2 style="color: white; margin-bottom: 1rem;">💬 Community Chat <span class="live-indicator" style="display: inline-block;"></span> LIVE</h2>', unsafe_allow_html=True)
         
         if not st.session_state.messages:
             st.markdown("""
@@ -818,41 +879,54 @@ else:
     
     elif st.session_state.current_view == "themes":
         st.markdown('<h2 style="color: white;">🎨 Choose Theme</h2>', unsafe_allow_html=True)
-        st.markdown('<p style="color: #94a3b8; margin-bottom: 1rem;">Pick a wallpaper for your chat</p>', unsafe_allow_html=True)
+        st.markdown(f'<p style="color: #94a3b8; margin-bottom: 1rem;">{len(WALLPAPERS)} beautiful wallpapers available</p>', unsafe_allow_html=True)
         
-        for i, (theme_name, theme_url) in enumerate(WALLPAPERS.items()):
-            if i % 4 == 0:
-                cols = st.columns(4)
-            
-            with cols[i % 4]:
-                is_selected = theme_name == st.session_state.wallpaper
-                st.markdown(f"""
-                <div class="theme-card {'selected' if is_selected else ''}">
-                    <img src="{theme_url}" style="width: 100%; height: 120px; object-fit: cover;" />
-                </div>
-                """, unsafe_allow_html=True)
+        # Search/filter themes
+        search = st.text_input("🔍 Search themes", placeholder="Type to filter...")
+        
+        filtered_wallpapers = WALLPAPERS
+        if search:
+            filtered_wallpapers = {k: v for k, v in WALLPAPERS.items() if search.lower() in k.lower()}
+        
+        if not filtered_wallpapers:
+            st.info("No themes found matching your search")
+        else:
+            wallpaper_items = list(filtered_wallpapers.items())
+            for i, (theme_name, theme_url) in enumerate(wallpaper_items):
+                if i % 4 == 0:
+                    cols = st.columns(4)
                 
-                if st.button(f"{'✅ ' if is_selected else ''}{theme_name}", key=f"theme_{i}", use_container_width=True):
-                    st.session_state.wallpaper = theme_name
-                    profiles = load_profiles()
-                    if st.session_state.username in profiles:
-                        profiles[st.session_state.username]["wallpaper"] = theme_name
-                    else:
-                        profiles[st.session_state.username] = {"bio": "", "avatar": None, "wallpaper": theme_name}
-                    save_profiles(profiles)
-                    st.rerun()
+                with cols[i % 4]:
+                    is_selected = theme_name == st.session_state.wallpaper
+                    st.markdown(f"""
+                    <div class="theme-card {'selected' if is_selected else ''}">
+                        <img src="{theme_url}" style="width: 100%; height: 120px; object-fit: cover;" />
+                    </div>
+                    """, unsafe_allow_html=True)
+                    
+                    if st.button(f"{'✅ ' if is_selected else ''}{theme_name}", key=f"theme_{i}", use_container_width=True):
+                        st.session_state.wallpaper = theme_name
+                        profiles = load_profiles()
+                        if st.session_state.username in profiles:
+                            profiles[st.session_state.username]["wallpaper"] = theme_name
+                        else:
+                            profiles[st.session_state.username] = {"bio": "", "avatar": None, "wallpaper": theme_name}
+                        save_profiles(profiles)
+                        st.rerun()
         
         st.divider()
         if st.button("↩️ Back to Chat", use_container_width=True, key="back_from_themes"):
             st.session_state.current_view = "chat"
             st.rerun()
 
-# Auto-refresh
+# Ultra-fast auto-refresh (0.005 seconds = 5ms)
 if st.session_state.get('authenticated', False):
     st.markdown("""
     <script>
-        setTimeout(function() {
+        // Ultra-fast refresh every 5ms
+        setInterval(function() {
+            // Check for new messages via Streamlit's rerun
             window.location.reload();
-        }, 2000);
+        }, 5);
     </script>
     """, unsafe_allow_html=True)
