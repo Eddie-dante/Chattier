@@ -12,9 +12,9 @@ import time
 import requests
 from typing import Dict, List, Optional, Any, Tuple
 import secrets
-import imghdr
 from functools import lru_cache
 import logging
+import io
 
 # Must be first
 st.set_page_config(page_title="Chattier Pro", page_icon="💬", layout="wide", initial_sidebar_state="collapsed")
@@ -50,6 +50,16 @@ RATE_LIMITS = {
     "reaction": 1.0,    # 1 reaction per second
     "vote": 0.5,        # 2 votes per second
 }
+
+# ========== IMAGE VALIDATION ==========
+def validate_image_bytes(data: bytes) -> bool:
+    """Validate uploaded file is actually an image (Python 3.13+ compatible)"""
+    try:
+        img = Image.open(io.BytesIO(data))
+        img.verify()
+        return img.format.lower() in ['jpeg', 'png', 'gif', 'webp']
+    except Exception:
+        return False
 
 # ========== RATE LIMITER ==========
 class RateLimiter:
@@ -371,11 +381,7 @@ class MessageHandler:
     @staticmethod
     def validate_image_data(data: bytes) -> bool:
         """Validate uploaded file is actually an image"""
-        try:
-            img_type = imghdr.what(None, data)
-            return img_type in ['jpeg', 'png', 'gif', 'webp']
-        except Exception:
-            return False
+        return validate_image_bytes(data)
     
     @staticmethod
     def send_message(text: str, attachment_data: Optional[str] = None, 
@@ -1877,7 +1883,7 @@ class UIComponents:
                             else:
                                 try:
                                     file_bytes = attachment.read()
-                                    if not MessageHandler.validate_image_data(file_bytes):
+                                    if not validate_image_bytes(file_bytes):
                                         st.error("Invalid image file")
                                     else:
                                         att_data = base64.b64encode(file_bytes).decode()
@@ -2071,7 +2077,8 @@ class AuthHandler:
                         return True, un
                 else:
                     # Legacy: direct SHA256 hash
-                    if user_data == DataManager.hash_password(password)[0]:
+                    hash_obj = hashlib.sha256(password.encode()).hexdigest()
+                    if user_data == hash_obj:
                         # Upgrade to new format
                         hashed_pw, salt = DataManager.hash_password(password)
                         users[un] = {
