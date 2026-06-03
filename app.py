@@ -13,7 +13,7 @@ import requests
 from typing import Dict, List, Optional, Any
 
 # Must be first
-st.set_page_config(page_title="Chattier Pro", page_icon="💬", layout="wide", initial_sidebar_state="expanded")
+st.set_page_config(page_title="Chattier Pro", page_icon="💬", layout="wide", initial_sidebar_state="collapsed")
 
 # ========== CONFIG ==========
 DATA_DIR = pathlib.Path("data")
@@ -148,14 +148,13 @@ class DataManager:
                             "username": username,
                             "avatar": profile.get("avatar"),
                             "is_active": True,
-                            "has_story": bool(hash(username) % 3 == 0)  # Simulate stories
+                            "has_story": bool(hash(username) % 3 == 0)
                         })
                 except:
                     pass
         
-        # Sort by most recently active
         active.sort(key=lambda x: x.get("last_seen", ""), reverse=True)
-        return active[:10]  # Limit to 10 stories
+        return active[:10]
 
 class MessageHandler:
     """Pure message operations"""
@@ -223,6 +222,28 @@ class MessageHandler:
         st.session_state.messages = messages
     
     @staticmethod
+    def delete_message(msg_id: str) -> None:
+        messages = [m for m in DataManager.get_messages() if m.get("id") != msg_id]
+        DataManager.save_messages(messages)
+        st.session_state.messages = messages
+    
+    @staticmethod
+    def edit_message(msg_id: str, new_text: str) -> None:
+        new_text = html.escape(str(new_text).strip())
+        if not new_text:
+            return
+        
+        messages = DataManager.get_messages()
+        for msg in messages:
+            if msg.get("id") == msg_id:
+                msg["text"] = new_text
+                msg["edited"] = True
+                break
+        
+        DataManager.save_messages(messages)
+        st.session_state.messages = messages
+    
+    @staticmethod
     def create_poll(question: str, options: List[str]) -> None:
         messages = DataManager.get_messages()
         poll_msg = {
@@ -248,13 +269,11 @@ class MessageHandler:
         for msg in messages:
             if msg.get("id") == msg_id and msg.get("type") == "poll":
                 poll_data = msg["poll_data"]
-                # Remove previous vote
                 for opt, voters in poll_data["options"].items():
                     if user in voters:
                         voters.remove(user)
                         poll_data["total_votes"] -= 1
                 
-                # Add new vote
                 if option in poll_data["options"]:
                     poll_data["options"][option].append(user)
                     poll_data["total_votes"] += 1
@@ -262,6 +281,16 @@ class MessageHandler:
         
         DataManager.save_messages(messages)
         st.session_state.messages = messages
+    
+    @staticmethod
+    def get_user_message_count(username: str) -> int:
+        messages = DataManager.get_messages()
+        return len([m for m in messages if m["username"] == username])
+    
+    @staticmethod
+    def get_all_users() -> List[str]:
+        messages = DataManager.get_messages()
+        return list(set(m["username"] for m in messages))
 
 
 # ========== SESSION INIT ==========
@@ -269,23 +298,22 @@ if 'init' not in st.session_state:
     st.session_state.messages = DataManager.get_messages()
     st.session_state.auth = False
     st.session_state.user = ""
-    st.session_state.view = "feed"
+    st.session_state.current_view = "feed"  # feed, profile, members, themes, create, search
     st.session_state.edit_id = None
     st.session_state.reply_to = None
-    st.session_state.selected_tab = "feed"
+    st.session_state.show_create_modal = False
     st.session_state.init = True
 
 if st.session_state.get('auth'):
     st.session_state.messages = DataManager.get_messages()
-    # Update last seen
     profiles = DataManager.get_profiles()
     if st.session_state.user in profiles:
         profiles[st.session_state.user]["last_seen"] = datetime.now().isoformat()
         DataManager.save_profiles(profiles)
 
-# ========== THEME ENGINE (Pure CSS) ==========
+# ========== THEME ENGINE ==========
 class ThemeEngine:
-    """Centralized CSS generation - no Python logic mixed"""
+    """Centralized CSS generation"""
     
     @staticmethod
     def inject_global_styles():
@@ -300,6 +328,11 @@ class ThemeEngine:
         
         #MainMenu, footer, header {
             visibility: hidden;
+        }
+        
+        /* Hide sidebar completely */
+        section[data-testid="stSidebar"] {
+            display: none;
         }
         
         /* === DARK LUXURIOUS BACKDROP === */
@@ -319,7 +352,6 @@ class ThemeEngine:
         .glass-card:hover {
             background: rgba(255, 255, 255, 0.08);
             border-color: rgba(255, 255, 255, 0.2);
-            transform: translateY(-1px);
         }
         
         /* === GRADIENT ACCENTS === */
@@ -372,6 +404,11 @@ class ThemeEngine:
             50% { border-color: #f093fb; }
         }
         
+        @keyframes slideUp {
+            from { transform: translateY(100%); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+        
         .animate-fade-in {
             animation: fadeInUp 0.4s ease;
         }
@@ -382,6 +419,42 @@ class ThemeEngine:
         
         .animate-glow {
             animation: glowBorder 2s ease-in-out infinite;
+        }
+        
+        .animate-slide-up {
+            animation: slideUp 0.3s ease;
+        }
+        
+        /* === TOP HEADER BAR === */
+        .top-header {
+            background: rgba(15, 10, 25, 0.8);
+            backdrop-filter: blur(20px);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            padding: 1rem;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        
+        .header-title {
+            color: #f1f5f9;
+            font-size: 1.2rem;
+            font-weight: 700;
+        }
+        
+        .header-avatar {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+        
+        .header-avatar:hover {
+            transform: scale(1.1);
         }
         
         /* === STORIES COMPONENT === */
@@ -423,6 +496,14 @@ class ThemeEngine:
             animation: glowBorder 2s ease-in-out infinite;
         }
         
+        .story-avatar-inner {
+            width: 100%;
+            height: 100%;
+            border-radius: 50%;
+            object-fit: cover;
+            border: 2px solid #0b0813;
+        }
+        
         .story-username {
             color: #94a3b8;
             font-size: 0.7rem;
@@ -456,6 +537,20 @@ class ThemeEngine:
             height: 40px;
             border-radius: 50%;
             object-fit: cover;
+            border: 2px solid rgba(102, 126, 234, 0.3);
+        }
+        
+        .card-avatar-placeholder {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            color: white;
+            font-size: 1rem;
+            border: 2px solid rgba(102, 126, 234, 0.3);
         }
         
         .card-user-info {
@@ -544,6 +639,7 @@ class ThemeEngine:
             background: rgba(255, 255, 255, 0.05);
             border-radius: 2px;
             margin-top: 0.3rem;
+            overflow: hidden;
         }
         
         .poll-progress-fill {
@@ -596,12 +692,12 @@ class ThemeEngine:
         }
         
         .stat-item {
-            padding: 0.5rem;
+            padding: 0.8rem 0.5rem;
         }
         
         .stat-number {
             color: #f1f5f9;
-            font-size: 1.2rem;
+            font-size: 1.3rem;
             font-weight: 700;
         }
         
@@ -610,44 +706,57 @@ class ThemeEngine:
             font-size: 0.7rem;
             text-transform: uppercase;
             letter-spacing: 0.05em;
+            margin-top: 0.2rem;
         }
         
         /* === BOTTOM NAVIGATION === */
         .bottom-nav {
-            position: sticky;
-            bottom: 1rem;
-            background: rgba(15, 10, 25, 0.9);
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: rgba(15, 10, 25, 0.95);
             backdrop-filter: blur(20px);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            border-radius: 16px;
-            padding: 0.8rem 1.5rem;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+            padding: 0.7rem 1rem 1rem 1rem;
             display: flex;
             align-items: center;
-            justify-content: space-between;
-            margin: 1rem 0;
+            justify-content: space-around;
             z-index: 1000;
         }
         
         .nav-item {
             color: #64748b;
-            font-size: 1.5rem;
+            font-size: 1.4rem;
             cursor: pointer;
             transition: all 0.2s;
-            padding: 0.3rem;
+            padding: 0.5rem;
+            border-radius: 12px;
+            text-decoration: none;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 0.2rem;
         }
         
         .nav-item:hover {
             color: #f1f5f9;
+            background: rgba(255, 255, 255, 0.05);
         }
         
         .nav-item.active {
             color: #667eea;
         }
         
+        .nav-item-label {
+            font-size: 0.6rem;
+            font-weight: 500;
+        }
+        
         .nav-create-btn {
             background: linear-gradient(135deg, #667eea, #764ba2);
-            width: 48px;
-            height: 48px;
+            width: 52px;
+            height: 52px;
             border-radius: 50%;
             display: flex;
             align-items: center;
@@ -655,40 +764,223 @@ class ThemeEngine:
             font-size: 1.5rem;
             color: white;
             cursor: pointer;
-            transition: transform 0.2s;
+            transition: all 0.2s;
             box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+            margin-top: -25px;
         }
         
         .nav-create-btn:hover {
             transform: scale(1.1);
+            box-shadow: 0 6px 20px rgba(102, 126, 234, 0.6);
+        }
+        
+        /* === CREATE MODAL === */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.7);
+            backdrop-filter: blur(5px);
+            display: flex;
+            align-items: flex-end;
+            justify-content: center;
+            z-index: 1001;
+        }
+        
+        .modal-content {
+            background: rgba(20, 15, 35, 0.98);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 24px 24px 0 0;
+            width: 100%;
+            max-width: 600px;
+            padding: 1.5rem;
+            animation: slideUp 0.3s ease;
+        }
+        
+        .modal-handle {
+            width: 40px;
+            height: 4px;
+            background: rgba(255, 255, 255, 0.3);
+            border-radius: 2px;
+            margin: 0 auto 1rem auto;
+        }
+        
+        /* === MEMBER LIST === */
+        .member-card {
+            background: rgba(255, 255, 255, 0.06);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+            padding: 0.8rem;
+            margin-bottom: 0.5rem;
+            display: flex;
+            align-items: center;
+            gap: 0.8rem;
+            transition: all 0.2s;
+            cursor: pointer;
+        }
+        
+        .member-card:hover {
+            background: rgba(255, 255, 255, 0.1);
+            transform: translateX(4px);
+        }
+        
+        .member-avatar {
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            flex-shrink: 0;
+        }
+        
+        .member-info {
+            flex: 1;
+        }
+        
+        .member-username {
+            color: #f1f5f9;
+            font-weight: 600;
+            font-size: 0.9rem;
+        }
+        
+        .member-status {
+            color: #64748b;
+            font-size: 0.75rem;
+        }
+        
+        .online-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: #10b981;
+            box-shadow: 0 0 8px rgba(16, 185, 129, 0.5);
+            flex-shrink: 0;
+        }
+        
+        .offline-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: #6b7280;
+            flex-shrink: 0;
+        }
+        
+        /* === SEARCH BAR === */
+        .search-container {
+            padding: 0.5rem 1rem;
+        }
+        
+        .search-input-wrapper {
+            background: rgba(255, 255, 255, 0.06);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+            padding: 0.5rem 1rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        .search-icon {
+            color: #64748b;
+            font-size: 1.2rem;
+        }
+        
+        /* === CONTENT AREA === */
+        .main-content {
+            padding: 0.5rem 1rem;
+            padding-bottom: 120px; /* Space for bottom nav */
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        
+        /* === EMPTY STATE === */
+        .empty-state {
+            text-align: center;
+            padding: 4rem 2rem;
+            color: #64748b;
+        }
+        
+        .empty-state-icon {
+            font-size: 4rem;
+            margin-bottom: 1rem;
+        }
+        
+        /* === THEME GRID === */
+        .theme-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 0.8rem;
+            padding: 1rem 0;
+        }
+        
+        .theme-card {
+            border-radius: 12px;
+            padding: 1.5rem;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.2s;
+            border: 2px solid transparent;
+        }
+        
+        .theme-card:hover {
+            transform: scale(1.05);
+        }
+        
+        .theme-card.selected {
+            border-color: #667eea;
+            box-shadow: 0 0 20px rgba(102, 126, 234, 0.3);
         }
         </style>
         """, unsafe_allow_html=True)
 
 
-# ========== UI COMPONENTS (Style-Isolated) ==========
+# ========== UI COMPONENTS ==========
 class UIComponents:
-    """Pure UI rendering - no data mutations"""
+    """Pure UI rendering"""
     
     @staticmethod
-    def render_avatar(username: str, size: int = 40, has_story: bool = False) -> str:
-        """Generate avatar HTML"""
+    def render_avatar_html(username: str, size: int = 40, has_story: bool = False) -> str:
+        """Generate avatar HTML string"""
         profile = DataManager.get_user_profile(username)
         avatar_path = profile.get("avatar")
+        colors = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7',
+                 '#DDA0DD', '#98D8C8', '#F7B787', '#FF8A80', '#B388FF']
+        color = colors[hash(username) % len(colors)]
+        
+        story_class = "active" if has_story else ""
         
         if avatar_path and os.path.exists(avatar_path):
             with open(avatar_path, "rb") as f:
                 b64 = base64.b64encode(f.read()).decode()
-            img_html = f'<img src="data:image/jpeg;base64,{b64}" class="card-avatar" style="width:{size}px;height:{size}px;">'
+            return f'''
+            <div class="story-avatar {story_class}">
+                <img src="data:image/jpeg;base64,{b64}" class="story-avatar-inner" style="width:{size}px;height:{size}px;">
+            </div>
+            '''
         else:
-            colors = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7', 
-                     '#DDA0DD', '#98D8C8', '#F7B787', '#FF8A80', '#B388FF']
-            color = colors[hash(username) % len(colors)]
             initial = username[0].upper() if username else "?"
-            img_html = f'<div class="card-avatar gradient-accent" style="width:{size}px;height:{size}px;display:flex;align-items:center;justify-content:center;font-weight:700;color:white;font-size:{size*0.4}px;">{initial}</div>'
+            return f'''
+            <div class="story-avatar {story_class}">
+                <div class="card-avatar-placeholder gradient-accent" style="width:{size}px;height:{size}px;font-size:{size*0.45}px;">
+                    {initial}
+                </div>
+            </div>
+            '''
+    
+    @staticmethod
+    def render_top_header():
+        """Render the top header bar"""
+        profile = DataManager.get_user_profile(st.session_state.user)
         
-        story_class = "active" if has_story else ""
-        return f'<div class="story-avatar {story_class}">{img_html}</div>'
+        with st.container():
+            st.markdown(f"""
+            <div class="top-header">
+                <div class="header-title">Chattier Pro</div>
+                {UIComponents.render_avatar_html(st.session_state.user, 36)}
+            </div>
+            """, unsafe_allow_html=True)
     
     @staticmethod
     def render_stories_row():
@@ -701,19 +993,22 @@ class UIComponents:
         with st.container():
             st.markdown('<div class="stories-container">', unsafe_allow_html=True)
             
+            # Add current user's story
+            st.markdown(f"""
+            <div class="story-item">
+                {UIComponents.render_avatar_html(st.session_state.user, 64, False)}
+                <div class="story-username">Your Story</div>
+            </div>
+            """, unsafe_allow_html=True)
+            
             for user_data in active_users:
-                username = user_data["username"]
-                avatar_html = UIComponents.render_avatar(
-                    username, 
-                    size=64, 
-                    has_story=user_data.get("has_story", False)
-                )
-                st.markdown(f"""
-                <div class="story-item">
-                    {avatar_html}
-                    <div class="story-username">@{username[:12]}</div>
-                </div>
-                """, unsafe_allow_html=True)
+                if user_data["username"] != st.session_state.user:
+                    st.markdown(f"""
+                    <div class="story-item">
+                        {UIComponents.render_avatar_html(user_data['username'], 64, user_data.get('has_story', False))}
+                        <div class="story-username">@{user_data['username'][:12]}</div>
+                    </div>
+                    """, unsafe_allow_html=True)
             
             st.markdown('</div>', unsafe_allow_html=True)
     
@@ -722,13 +1017,11 @@ class UIComponents:
         """Render a standard feed card"""
         with st.container():
             username = msg["username"]
-            profile = DataManager.get_user_profile(username)
             
-            # Card HTML structure
             st.markdown(f"""
             <div class="feed-card animate-fade-in">
                 <div class="card-header">
-                    {UIComponents.render_avatar(username, 40)}
+                    {UIComponents.render_avatar_html(username, 40)}
                     <div class="card-user-info">
                         <div class="card-username">@{username}</div>
                         <div class="card-timestamp">{UIComponents.format_timestamp(msg.get('timestamp', ''))}</div>
@@ -736,30 +1029,27 @@ class UIComponents:
                 </div>
             """, unsafe_allow_html=True)
             
-            # Message text
             if msg.get("text"):
-                st.markdown(f'<div class="card-text">{msg["text"]}</div>', unsafe_allow_html=True)
+                edited_badge = ' <span style="color:#64748b;font-size:0.7rem;">(edited)</span>' if msg.get("edited") else ""
+                st.markdown(f'<div class="card-text">{msg["text"]}{edited_badge}</div>', unsafe_allow_html=True)
             
-            # Image attachment
             if msg.get("attachment") and msg.get("type") == "image":
-                st.markdown(f"""
-                <img src="{msg['attachment']}" class="card-image">
-                """, unsafe_allow_html=True)
+                st.markdown(f'<img src="{msg["attachment"]}" class="card-image">', unsafe_allow_html=True)
             
-            # File attachment
             if msg.get("attachment") and msg.get("type") == "file":
                 st.markdown(f"""
                 <div class="media-card">
                     <div style="font-size:2rem;">📎</div>
                     <div class="media-info">
                         <div class="media-title">{msg.get('attachment_name', 'File')}</div>
+                        <div class="media-subtitle">Shared file</div>
                     </div>
                 </div>
                 """, unsafe_allow_html=True)
             
-            # Action bar with native buttons
+            # Action buttons - using columns for layout but within container
             st.markdown('<div class="card-actions">', unsafe_allow_html=True)
-            cols = st.columns([1, 1, 1, 1, 8])
+            cols = st.columns([1, 1, 1, 1, 6])
             
             with cols[0]:
                 if st.button("❤️", key=f"like_{msg['id']}"):
@@ -776,13 +1066,12 @@ class UIComponents:
                     MessageHandler.add_reaction(msg["id"], "🔖")
                     st.rerun()
             
-            # Reactions display
+            # Show reactions
             if msg.get("reactions"):
                 reaction_html = ""
                 for emoji, users in msg["reactions"].items():
                     count = len(users)
                     reaction_html += f'<span class="action-button">{emoji} {count}</span>'
-                
                 with cols[3]:
                     st.markdown(reaction_html, unsafe_allow_html=True)
             
@@ -800,7 +1089,7 @@ class UIComponents:
             st.markdown(f"""
             <div class="feed-card animate-fade-in">
                 <div class="card-header">
-                    {UIComponents.render_avatar(username, 40)}
+                    {UIComponents.render_avatar_html(username, 40)}
                     <div class="card-user-info">
                         <div class="card-username">@{username}</div>
                         <div class="card-timestamp">Poll • {UIComponents.format_timestamp(msg.get('timestamp', ''))}</div>
@@ -810,14 +1099,13 @@ class UIComponents:
                 <div class="poll-container">
             """, unsafe_allow_html=True)
             
-            # Poll options with native buttons
             for option_name, voters in options.items():
                 percentage = (len(voters) / total_votes * 100) if total_votes > 0 else 0
                 
                 st.markdown(f"""
                 <div class="poll-option">
                     <div style="display:flex;justify-content:space-between;color:#e2e8f0;">
-                        <span>{option_name}</span>
+                        <span>{html.escape(option_name)}</span>
                         <span>{percentage:.0f}%</span>
                     </div>
                     <div class="poll-progress">
@@ -826,7 +1114,7 @@ class UIComponents:
                 </div>
                 """, unsafe_allow_html=True)
                 
-                if st.button(f"Vote {option_name}", key=f"vote_{msg['id']}_{option_name}"):
+                if st.button(f"Vote", key=f"vote_{msg['id']}_{option_name}"):
                     MessageHandler.vote_poll(msg["id"], option_name)
                     st.rerun()
             
@@ -839,14 +1127,14 @@ class UIComponents:
     
     @staticmethod
     def render_media_card(msg: Dict):
-        """Render media/link card"""
+        """Render media card"""
         with st.container():
             username = msg["username"]
             
             st.markdown(f"""
             <div class="feed-card animate-fade-in">
                 <div class="card-header">
-                    {UIComponents.render_avatar(username, 40)}
+                    {UIComponents.render_avatar_html(username, 40)}
                     <div class="card-user-info">
                         <div class="card-username">@{username}</div>
                         <div class="card-timestamp">{UIComponents.format_timestamp(msg.get('timestamp', ''))}</div>
@@ -854,7 +1142,6 @@ class UIComponents:
                 </div>
             """, unsafe_allow_html=True)
             
-            # Media preview
             if msg.get("attachment") and msg.get("type") == "image":
                 st.markdown(f"""
                 <div class="media-card">
@@ -873,21 +1160,27 @@ class UIComponents:
             st.markdown('</div>', unsafe_allow_html=True)
     
     @staticmethod
-    def render_profile_stats(username: str):
-        """Render profile statistics grid"""
-        profile = DataManager.get_user_profile(username)
+    def render_profile_view():
+        """Render profile page"""
+        profile = DataManager.get_user_profile(st.session_state.user)
         stats = profile.get("stats", {})
         
         with st.container():
+            st.markdown('<div class="main-content">', unsafe_allow_html=True)
+            
+            # Profile header
             st.markdown(f"""
-            <div class="glass-card" style="padding:1.5rem;">
-                <div style="display:flex;align-items:center;gap:1rem;margin-bottom:1.5rem;">
-                    {UIComponents.render_avatar(username, 60)}
-                    <div>
-                        <div style="color:#f1f5f9;font-weight:700;font-size:1.2rem;">@{username}</div>
-                        <div style="color:#94a3b8;font-size:0.8rem;">{profile.get('status', 'No status')}</div>
-                    </div>
-                </div>
+            <div class="glass-card" style="padding:2rem;text-align:center;margin-bottom:1rem;">
+                {UIComponents.render_avatar_html(st.session_state.user, 80)}
+                <h2 style="color:#f1f5f9;margin-top:1rem;">@{st.session_state.user}</h2>
+                <p style="color:#94a3b8;">{profile.get('status', 'No status set')}</p>
+                <p style="color:#64748b;margin-top:1rem;">{profile.get('bio', 'No bio yet')}</p>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            # Stats grid
+            st.markdown(f"""
+            <div class="glass-card" style="padding:1.5rem;margin-bottom:1rem;">
                 <div class="stats-grid">
                     <div class="stat-item">
                         <div class="stat-number">{stats.get('posts', 0)}</div>
@@ -904,20 +1197,259 @@ class UIComponents:
                 </div>
             </div>
             """, unsafe_allow_html=True)
+            
+            # Edit profile form
+            with st.expander("✏️ Edit Profile", expanded=False):
+                with st.form("profile_edit_form"):
+                    bio = st.text_area("Bio", value=profile.get("bio", ""), max_chars=200)
+                    status = st.text_input("Status", value=profile.get("status", ""), max_chars=60)
+                    avatar_file = st.file_uploader("Avatar", type=['png', 'jpg', 'jpeg'])
+                    
+                    if st.form_submit_button("Save Profile", use_container_width=True):
+                        profiles = DataManager.get_profiles()
+                        if st.session_state.user in profiles:
+                            profiles[st.session_state.user]["bio"] = html.escape(bio) if bio else ""
+                            profiles[st.session_state.user]["status"] = html.escape(status) if status else ""
+                            
+                            if avatar_file:
+                                try:
+                                    img = Image.open(avatar_file)
+                                    if img.mode in ('RGBA', 'LA', 'P'):
+                                        bg = Image.new('RGB', img.size, (255, 255, 255))
+                                        if img.mode == 'P':
+                                            img = img.convert('RGBA')
+                                        bg.paste(img, mask=img.split()[-1] if img.mode == 'RGBA' else None)
+                                        img = bg
+                                    else:
+                                        img = img.convert("RGB")
+                                    
+                                    img.thumbnail((200, 200))
+                                    avatar_path = UPLOADS_DIR / f"{st.session_state.user}_avatar.jpg"
+                                    img.save(avatar_path, "JPEG", quality=75)
+                                    profiles[st.session_state.user]["avatar"] = str(avatar_path)
+                                except Exception as e:
+                                    st.error(f"Failed to process avatar: {e}")
+                            
+                            DataManager.save_profiles(profiles)
+                            st.success("Profile updated!")
+                            time.sleep(0.5)
+                            st.rerun()
+            
+            # User's recent posts
+            user_messages = [m for m in st.session_state.messages 
+                           if m["username"] == st.session_state.user][-10:]
+            
+            if user_messages:
+                st.markdown('<h3 style="color:#f1f5f9;margin-top:1.5rem;">Recent Posts</h3>', unsafe_allow_html=True)
+                for msg in reversed(user_messages):
+                    msg_type = msg.get("type", "text")
+                    if msg_type in ["text", "image", "file"]:
+                        UIComponents.render_feed_card(msg)
+                    elif msg_type == "poll":
+                        UIComponents.render_poll_card(msg)
+            
+            st.markdown('</div>', unsafe_allow_html=True)
+    
+    @staticmethod
+    def render_members_view():
+        """Render members/directory page"""
+        all_users = MessageHandler.get_all_users()
+        
+        with st.container():
+            st.markdown('<div class="main-content">', unsafe_allow_html=True)
+            
+            # Search bar
+            st.markdown("""
+            <div class="search-container">
+                <div class="search-input-wrapper">
+                    <span class="search-icon">🔍</span>
+                    <span style="color:#64748b;">Search members...</span>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            search_query = st.text_input("Search", label_visibility="collapsed", 
+                                        placeholder="Search members...")
+            
+            filtered_users = [u for u in all_users 
+                            if search_query.lower() in u.lower()] if search_query else all_users
+            
+            if filtered_users:
+                for username in filtered_users[:20]:
+                    profile = DataManager.get_user_profile(username)
+                    is_online = False
+                    if profile.get("last_seen"):
+                        try:
+                            last_seen = datetime.fromisoformat(profile["last_seen"])
+                            is_online = (datetime.now() - last_seen).seconds < 300
+                        except:
+                            pass
+                    
+                    dot_class = "online-dot" if is_online else "offline-dot"
+                    status_text = "Online" if is_online else profile.get("status", "Offline")
+                    
+                    st.markdown(f"""
+                    <div class="member-card">
+                        {UIComponents.render_avatar_html(username, 48)}
+                        <div class="member-info">
+                            <div class="member-username">@{username}</div>
+                            <div class="member-status">{status_text[:50]}</div>
+                        </div>
+                        <div class="{dot_class}"></div>
+                    </div>
+                    """, unsafe_allow_html=True)
+            else:
+                st.markdown("""
+                <div class="empty-state">
+                    <div class="empty-state-icon">👥</div>
+                    <p>No members found</p>
+                </div>
+                """, unsafe_allow_html=True)
+            
+            st.markdown('</div>', unsafe_allow_html=True)
+    
+    @staticmethod
+    def render_themes_view():
+        """Render themes selection page"""
+        themes = [
+            {"name": "Midnight", "colors": ["#0b0813", "#1a1030", "#2d1b4e"], "icon": "🌙"},
+            {"name": "Ocean", "colors": ["#0a192f", "#112240", "#233554"], "icon": "🌊"},
+            {"name": "Sunset", "colors": ["#1a0a2e", "#2d1b4e", "#4a1942"], "icon": "🌅"},
+            {"name": "Forest", "colors": ["#0a1a0a", "#1a2f1a", "#2d4e2d"], "icon": "🌲"},
+            {"name": "Neon", "colors": ["#0a0a2e", "#1a1a4e", "#2d2d7a"], "icon": "💜"},
+            {"name": "Ruby", "colors": ["#1a0a0a", "#2e1a1a", "#4e2d2d"], "icon": "❤️"},
+        ]
+        
+        with st.container():
+            st.markdown('<div class="main-content">', unsafe_allow_html=True)
+            st.markdown('<h3 style="color:#f1f5f9;">Choose Theme</h3>', unsafe_allow_html=True)
+            
+            st.markdown('<div class="theme-grid">', unsafe_allow_html=True)
+            
+            for i, theme in enumerate(themes):
+                gradient = f"linear-gradient(135deg, {theme['colors'][0]}, {theme['colors'][1]}, {theme['colors'][2]})"
+                
+                cols = st.columns([1])
+                with cols[0]:
+                    st.markdown(f"""
+                    <div class="theme-card" style="background:{gradient};">
+                        <div style="font-size:2rem;">{theme['icon']}</div>
+                        <div style="color:white;font-size:0.8rem;margin-top:0.5rem;">{theme['name']}</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+                    
+                    if st.button(f"Apply", key=f"theme_{i}", use_container_width=True):
+                        st.success(f"{theme['name']} theme applied!")
+                        st.rerun()
+            
+            st.markdown('</div></div>', unsafe_allow_html=True)
+    
+    @staticmethod
+    def render_create_modal():
+        """Render create post modal"""
+        with st.container():
+            st.markdown("""
+            <div class="modal-overlay">
+                <div class="modal-content">
+                    <div class="modal-handle"></div>
+                    <h3 style="color:#f1f5f9;text-align:center;">Create Post</h3>
+            """, unsafe_allow_html=True)
+            
+            tab1, tab2 = st.tabs(["Text Post", "Poll"])
+            
+            with tab1:
+                with st.form("create_text_post", clear_on_submit=True):
+                    text = st.text_area("What's on your mind?", max_chars=1000, height=100)
+                    attachment = st.file_uploader("Add image", type=['png', 'jpg', 'jpeg', 'gif'])
+                    
+                    if st.form_submit_button("Post", use_container_width=True):
+                        att_data = None
+                        att_name = None
+                        if attachment:
+                            try:
+                                att_data = base64.b64encode(attachment.read()).decode()
+                                att_name = attachment.name
+                            except:
+                                st.error("Failed to process attachment")
+                        
+                        if text.strip() or att_data:
+                            MessageHandler.send_message(text, att_data, att_name)
+                            st.session_state.show_create_modal = False
+                            st.rerun()
+            
+            with tab2:
+                with st.form("create_poll", clear_on_submit=True):
+                    question = st.text_input("Poll question", max_chars=200)
+                    options_text = st.text_area("Options (one per line)", height=100,
+                                               placeholder="Option 1\nOption 2\nOption 3")
+                    
+                    if st.form_submit_button("Create Poll", use_container_width=True):
+                        if question and options_text:
+                            options = [opt.strip() for opt in options_text.split('\n') if opt.strip()]
+                            if len(options) >= 2:
+                                MessageHandler.create_poll(question, options)
+                                st.session_state.show_create_modal = False
+                                st.rerun()
+                            else:
+                                st.error("Add at least 2 options")
+            
+            st.markdown('</div></div>', unsafe_allow_html=True)
     
     @staticmethod
     def render_bottom_navigation():
-        """Render sticky bottom navigation"""
+        """Render the main bottom navigation bar"""
+        current = st.session_state.current_view
+        
         with st.container():
-            st.markdown("""
-            <div class="bottom-nav">
-                <span class="nav-item active">🏠</span>
-                <span class="nav-item">🔍</span>
-                <div class="nav-create-btn">+</div>
-                <span class="nav-item">💬</span>
-                <span class="nav-item">👤</span>
-            </div>
-            """, unsafe_allow_html=True)
+            cols = st.columns([1, 1, 1.2, 1, 1])
+            
+            with cols[0]:
+                if st.button("🏠", key="nav_feed", use_container_width=True,
+                           help="Feed"):
+                    st.session_state.current_view = "feed"
+                    st.session_state.show_create_modal = False
+                    st.rerun()
+                if current == "feed":
+                    st.markdown('<div style="text-align:center;color:#667eea;font-size:0.6rem;">Feed</div>', 
+                              unsafe_allow_html=True)
+            
+            with cols[1]:
+                if st.button("👥", key="nav_members", use_container_width=True,
+                           help="Members"):
+                    st.session_state.current_view = "members"
+                    st.session_state.show_create_modal = False
+                    st.rerun()
+                if current == "members":
+                    st.markdown('<div style="text-align:center;color:#667eea;font-size:0.6rem;">Members</div>', 
+                              unsafe_allow_html=True)
+            
+            with cols[2]:
+                if st.button("➕", key="nav_create", use_container_width=True,
+                           help="Create"):
+                    st.session_state.show_create_modal = not st.session_state.show_create_modal
+                    st.rerun()
+                st.markdown('<div style="text-align:center;color:#f093fb;font-size:0.6rem;">Create</div>', 
+                          unsafe_allow_html=True)
+            
+            with cols[3]:
+                if st.button("🎨", key="nav_themes", use_container_width=True,
+                           help="Themes"):
+                    st.session_state.current_view = "themes"
+                    st.session_state.show_create_modal = False
+                    st.rerun()
+                if current == "themes":
+                    st.markdown('<div style="text-align:center;color:#667eea;font-size:0.6rem;">Themes</div>', 
+                              unsafe_allow_html=True)
+            
+            with cols[4]:
+                if st.button("👤", key="nav_profile", use_container_width=True,
+                           help="Profile"):
+                    st.session_state.current_view = "profile"
+                    st.session_state.show_create_modal = False
+                    st.rerun()
+                if current == "profile":
+                    st.markdown('<div style="text-align:center;color:#667eea;font-size:0.6rem;">Profile</div>', 
+                              unsafe_allow_html=True)
     
     @staticmethod
     def format_timestamp(ts: str) -> str:
@@ -960,7 +1492,6 @@ class AuthHandler:
         users[username] = DataManager.hash_password(password)
         DataManager.save_users(users)
         
-        # Initialize profile
         profiles = DataManager.get_profiles()
         profiles[username] = DataManager.get_user_profile(username)
         DataManager.save_profiles(profiles)
@@ -980,17 +1511,15 @@ class AuthHandler:
 
 # ========== MAIN APP ==========
 def main():
-    # Inject global styles
     ThemeEngine.inject_global_styles()
     
-    # Authentication flow
     if not st.session_state.auth:
         render_auth_screen()
     else:
-        render_dashboard()
+        render_app_shell()
 
 def render_auth_screen():
-    """Render authentication UI"""
+    """Render authentication screen"""
     _, center, _ = st.columns([1, 2, 1])
     
     with center:
@@ -1031,147 +1560,64 @@ def render_auth_screen():
                     else:
                         st.error(message)
 
-def render_dashboard():
-    """Main dashboard layout"""
+def render_app_shell():
+    """Main app shell with navigation"""
     
-    # Sidebar - Profile section
-    with st.sidebar:
-        st.markdown(f"""
-        <div style="text-align:center;padding:1rem;">
-            <div style="font-size:3rem;">💬</div>
-            <h3 class="gradient-text">Chattier Pro</h3>
-        </div>
-        """, unsafe_allow_html=True)
-        
-        # Profile stats
-        UIComponents.render_profile_stats(st.session_state.user)
-        
-        st.divider()
-        
-        # Navigation buttons
-        with st.container():
-            if st.button("🏠 Feed", use_container_width=True):
-                st.session_state.view = "feed"
-                st.rerun()
-            
-            if st.button("👤 Profile", use_container_width=True):
-                st.session_state.view = "profile"
-                st.rerun()
-            
-            if st.button("🎨 Themes", use_container_width=True):
-                st.session_state.view = "themes"
-                st.rerun()
-        
-        st.divider()
-        
-        if st.button("🚪 Sign Out", use_container_width=True):
-            st.session_state.auth = False
-            st.session_state.user = ""
-            st.rerun()
+    # Fixed top header
+    UIComponents.render_top_header()
     
     # Main content area
-    if st.session_state.view == "feed":
+    if st.session_state.current_view == "feed":
         render_feed_view()
-    elif st.session_state.view == "profile":
-        render_profile_view()
-    elif st.session_state.view == "themes":
-        render_themes_view()
+    elif st.session_state.current_view == "profile":
+        UIComponents.render_profile_view()
+    elif st.session_state.current_view == "members":
+        UIComponents.render_members_view()
+    elif st.session_state.current_view == "themes":
+        UIComponents.render_themes_view()
     
-    # Bottom navigation
+    # Create modal overlay
+    if st.session_state.show_create_modal:
+        UIComponents.render_create_modal()
+    
+    # Spacer for bottom nav
+    st.markdown('<div style="height:100px;"></div>', unsafe_allow_html=True)
+    
+    # Fixed bottom navigation
     UIComponents.render_bottom_navigation()
 
 def render_feed_view():
-    """Render the main feed with stories and cards"""
-    
-    # Stories row
-    UIComponents.render_stories_row()
-    
-    st.markdown('<div style="height:1rem;"></div>', unsafe_allow_html=True)
-    
-    # Feed cards
-    messages = st.session_state.messages[-30:]  # Last 30 messages
-    
-    for msg in reversed(messages):
-        msg_type = msg.get("type", "text")
-        
-        if msg_type in ["text", "image", "file"]:
-            UIComponents.render_feed_card(msg)
-        elif msg_type == "poll":
-            UIComponents.render_poll_card(msg)
-        elif msg_type == "media":
-            UIComponents.render_media_card(msg)
-    
-    # Quick post input
-    st.divider()
+    """Render main feed"""
     with st.container():
-        with st.form("quick_post", clear_on_submit=True):
-            col1, col2 = st.columns([5, 1])
-            
-            with col1:
-                text = st.text_input(
-                    "What's happening?",
-                    placeholder=f"Share something @{st.session_state.user}...",
-                    label_visibility="collapsed"
-                )
-            
-            with col2:
-                submitted = st.form_submit_button("Post", use_container_width=True)
-            
-            if submitted and text.strip():
-                MessageHandler.send_message(text)
-                st.rerun()
-
-def render_profile_view():
-    """Render profile editing view"""
-    st.markdown('<h3 style="color:#f1f5f9;">Edit Profile</h3>', unsafe_allow_html=True)
-    
-    with st.container():
-        UIComponents.render_profile_stats(st.session_state.user)
-    
-    with st.form("profile_form"):
-        profile = DataManager.get_user_profile(st.session_state.user)
+        st.markdown('<div class="main-content">', unsafe_allow_html=True)
         
-        bio = st.text_area("Bio", value=profile.get("bio", ""), max_chars=200)
-        status = st.text_input("Status", value=profile.get("status", ""), max_chars=60)
-        avatar = st.file_uploader("Avatar", type=['png', 'jpg', 'jpeg'])
+        # Stories
+        UIComponents.render_stories_row()
         
-        if st.form_submit_button("Save Profile", use_container_width=True):
-            # Update profile
-            profiles = DataManager.get_profiles()
-            if st.session_state.user in profiles:
-                profiles[st.session_state.user]["bio"] = html.escape(bio) if bio else ""
-                profiles[st.session_state.user]["status"] = html.escape(status) if status else ""
+        # Messages feed
+        messages = st.session_state.messages[-30:]
+        
+        if not messages:
+            st.markdown("""
+            <div class="empty-state">
+                <div class="empty-state-icon">✨</div>
+                <p style="color:#94a3b8;">No messages yet</p>
+                <p style="color:#64748b;font-size:0.8rem;">Be the first to post!</p>
+            </div>
+            """, unsafe_allow_html=True)
+        else:
+            for msg in reversed(messages):
+                msg_type = msg.get("type", "text")
                 
-                if avatar:
-                    try:
-                        img = Image.open(avatar)
-                        if img.mode in ('RGBA', 'LA', 'P'):
-                            bg = Image.new('RGB', img.size, (255, 255, 255))
-                            if img.mode == 'P':
-                                img = img.convert('RGBA')
-                            bg.paste(img, mask=img.split()[-1] if img.mode == 'RGBA' else None)
-                            img = bg
-                        else:
-                            img = img.convert("RGB")
-                        
-                        img.thumbnail((200, 200))
-                        avatar_path = UPLOADS_DIR / f"{st.session_state.user}_avatar.jpg"
-                        img.save(avatar_path, "JPEG", quality=75)
-                        profiles[st.session_state.user]["avatar"] = str(avatar_path)
-                    except:
-                        st.error("Failed to process avatar")
-                
-                DataManager.save_profiles(profiles)
-                st.success("Profile updated!")
-                time.sleep(0.5)
-                st.rerun()
+                if msg_type in ["text", "image", "file"]:
+                    UIComponents.render_feed_card(msg)
+                elif msg_type == "poll":
+                    UIComponents.render_poll_card(msg)
+                elif msg_type == "media":
+                    UIComponents.render_media_card(msg)
+        
+        st.markdown('</div>', unsafe_allow_html=True)
 
-def render_themes_view():
-    """Render theme selection"""
-    st.markdown('<h3 style="color:#f1f5f9;">Themes</h3>', unsafe_allow_html=True)
-    st.info("Theme selection coming soon!")
 
-# ========== APP ENTRY POINT ==========
 if __name__ == "__main__":
     main()
-    
