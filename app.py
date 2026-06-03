@@ -283,28 +283,34 @@ class MessageHandler:
         st.session_state.messages = messages
     
     @staticmethod
-    def get_user_message_count(username: str) -> int:
-        messages = DataManager.get_messages()
-        return len([m for m in messages if m["username"] == username])
-    
-    @staticmethod
     def get_all_users() -> List[str]:
         messages = DataManager.get_messages()
         return list(set(m["username"] for m in messages))
 
 
-# ========== SESSION INIT ==========
-if 'init' not in st.session_state:
-    st.session_state.messages = DataManager.get_messages()
-    st.session_state.auth = False
-    st.session_state.user = ""
-    st.session_state.current_view = "feed"  # feed, profile, members, themes, create, search
-    st.session_state.edit_id = None
-    st.session_state.reply_to = None
-    st.session_state.show_create_modal = False
-    st.session_state.init = True
+# ========== SESSION STATE INITIALIZATION ==========
+def init_session_state():
+    """Initialize all session state variables with defaults"""
+    defaults = {
+        'messages': DataManager.get_messages(),
+        'auth': False,
+        'user': "",
+        'current_view': "feed",
+        'edit_id': None,
+        'reply_to': None,
+        'show_create_modal': False,
+        'init': True
+    }
+    
+    for key, value in defaults.items():
+        if key not in st.session_state:
+            st.session_state[key] = value
 
-if st.session_state.get('auth'):
+# Initialize session state
+init_session_state()
+
+# Update messages and last seen for authenticated users
+if st.session_state.get('auth') and st.session_state.get('user'):
     st.session_state.messages = DataManager.get_messages()
     profiles = DataManager.get_profiles()
     if st.session_state.user in profiles:
@@ -890,7 +896,7 @@ class ThemeEngine:
         /* === CONTENT AREA === */
         .main-content {
             padding: 0.5rem 1rem;
-            padding-bottom: 120px; /* Space for bottom nav */
+            padding-bottom: 120px;
             max-width: 800px;
             margin: 0 auto;
         }
@@ -932,6 +938,25 @@ class ThemeEngine:
             border-color: #667eea;
             box-shadow: 0 0 20px rgba(102, 126, 234, 0.3);
         }
+        
+        /* Streamlit button overrides */
+        .stButton > button {
+            background: transparent;
+            border: none;
+            color: inherit;
+            padding: 0.5rem;
+            font-size: 1.2rem;
+        }
+        
+        .stButton > button:hover {
+            background: rgba(255, 255, 255, 0.1);
+            border: none;
+            color: inherit;
+        }
+        
+        .stButton > button:focus {
+            box-shadow: none;
+        }
         </style>
         """, unsafe_allow_html=True)
 
@@ -972,13 +997,12 @@ class UIComponents:
     @staticmethod
     def render_top_header():
         """Render the top header bar"""
-        profile = DataManager.get_user_profile(st.session_state.user)
-        
         with st.container():
+            username = st.session_state.get('user', 'User')
             st.markdown(f"""
             <div class="top-header">
                 <div class="header-title">Chattier Pro</div>
-                {UIComponents.render_avatar_html(st.session_state.user, 36)}
+                {UIComponents.render_avatar_html(username, 36)}
             </div>
             """, unsafe_allow_html=True)
     
@@ -986,23 +1010,25 @@ class UIComponents:
     def render_stories_row():
         """Render stories component"""
         active_users = DataManager.get_active_users()
+        current_user = st.session_state.get('user', '')
         
-        if not active_users:
+        if not active_users and not current_user:
             return
         
         with st.container():
             st.markdown('<div class="stories-container">', unsafe_allow_html=True)
             
             # Add current user's story
-            st.markdown(f"""
-            <div class="story-item">
-                {UIComponents.render_avatar_html(st.session_state.user, 64, False)}
-                <div class="story-username">Your Story</div>
-            </div>
-            """, unsafe_allow_html=True)
+            if current_user:
+                st.markdown(f"""
+                <div class="story-item">
+                    {UIComponents.render_avatar_html(current_user, 64, False)}
+                    <div class="story-username">Your Story</div>
+                </div>
+                """, unsafe_allow_html=True)
             
             for user_data in active_users:
-                if user_data["username"] != st.session_state.user:
+                if user_data["username"] != current_user:
                     st.markdown(f"""
                     <div class="story-item">
                         {UIComponents.render_avatar_html(user_data['username'], 64, user_data.get('has_story', False))}
@@ -1016,7 +1042,8 @@ class UIComponents:
     def render_feed_card(msg: Dict):
         """Render a standard feed card"""
         with st.container():
-            username = msg["username"]
+            username = msg.get("username", "unknown")
+            msg_id = msg.get("id", str(uuid.uuid4()))
             
             st.markdown(f"""
             <div class="feed-card animate-fade-in">
@@ -1031,7 +1058,7 @@ class UIComponents:
             
             if msg.get("text"):
                 edited_badge = ' <span style="color:#64748b;font-size:0.7rem;">(edited)</span>' if msg.get("edited") else ""
-                st.markdown(f'<div class="card-text">{msg["text"]}{edited_badge}</div>', unsafe_allow_html=True)
+                st.markdown(f'<div class="card-text">{html.escape(msg["text"])}{edited_badge}</div>', unsafe_allow_html=True)
             
             if msg.get("attachment") and msg.get("type") == "image":
                 st.markdown(f'<img src="{msg["attachment"]}" class="card-image">', unsafe_allow_html=True)
@@ -1041,29 +1068,29 @@ class UIComponents:
                 <div class="media-card">
                     <div style="font-size:2rem;">📎</div>
                     <div class="media-info">
-                        <div class="media-title">{msg.get('attachment_name', 'File')}</div>
+                        <div class="media-title">{html.escape(msg.get('attachment_name', 'File'))}</div>
                         <div class="media-subtitle">Shared file</div>
                     </div>
                 </div>
                 """, unsafe_allow_html=True)
             
-            # Action buttons - using columns for layout but within container
+            # Action buttons using Streamlit columns
             st.markdown('<div class="card-actions">', unsafe_allow_html=True)
-            cols = st.columns([1, 1, 1, 1, 6])
+            action_cols = st.columns([1, 1, 1, 2, 5])
             
-            with cols[0]:
-                if st.button("❤️", key=f"like_{msg['id']}"):
-                    MessageHandler.add_reaction(msg["id"], "❤️")
+            with action_cols[0]:
+                if st.button("❤️", key=f"like_{msg_id}"):
+                    MessageHandler.add_reaction(msg_id, "❤️")
                     st.rerun()
             
-            with cols[1]:
-                if st.button("💬", key=f"comment_{msg['id']}"):
-                    st.session_state.reply_to = msg["id"]
+            with action_cols[1]:
+                if st.button("💬", key=f"comment_{msg_id}"):
+                    st.session_state.reply_to = msg_id
                     st.rerun()
             
-            with cols[2]:
-                if st.button("🔖", key=f"bookmark_{msg['id']}"):
-                    MessageHandler.add_reaction(msg["id"], "🔖")
+            with action_cols[2]:
+                if st.button("🔖", key=f"bookmark_{msg_id}"):
+                    MessageHandler.add_reaction(msg_id, "🔖")
                     st.rerun()
             
             # Show reactions
@@ -1072,7 +1099,7 @@ class UIComponents:
                 for emoji, users in msg["reactions"].items():
                     count = len(users)
                     reaction_html += f'<span class="action-button">{emoji} {count}</span>'
-                with cols[3]:
+                with action_cols[3]:
                     st.markdown(reaction_html, unsafe_allow_html=True)
             
             st.markdown('</div></div>', unsafe_allow_html=True)
@@ -1081,7 +1108,8 @@ class UIComponents:
     def render_poll_card(msg: Dict):
         """Render poll card"""
         with st.container():
-            username = msg["username"]
+            username = msg.get("username", "unknown")
+            msg_id = msg.get("id", str(uuid.uuid4()))
             poll_data = msg.get("poll_data", {})
             total_votes = poll_data.get("total_votes", 0)
             options = poll_data.get("options", {})
@@ -1095,17 +1123,18 @@ class UIComponents:
                         <div class="card-timestamp">Poll • {UIComponents.format_timestamp(msg.get('timestamp', ''))}</div>
                     </div>
                 </div>
-                <div class="card-text" style="font-weight:600;">{msg.get('text', '')}</div>
+                <div class="card-text" style="font-weight:600;">{html.escape(msg.get('text', ''))}</div>
                 <div class="poll-container">
             """, unsafe_allow_html=True)
             
             for option_name, voters in options.items():
                 percentage = (len(voters) / total_votes * 100) if total_votes > 0 else 0
+                safe_option = html.escape(option_name)
                 
                 st.markdown(f"""
                 <div class="poll-option">
                     <div style="display:flex;justify-content:space-between;color:#e2e8f0;">
-                        <span>{html.escape(option_name)}</span>
+                        <span>{safe_option}</span>
                         <span>{percentage:.0f}%</span>
                     </div>
                     <div class="poll-progress">
@@ -1114,8 +1143,8 @@ class UIComponents:
                 </div>
                 """, unsafe_allow_html=True)
                 
-                if st.button(f"Vote", key=f"vote_{msg['id']}_{option_name}"):
-                    MessageHandler.vote_poll(msg["id"], option_name)
+                if st.button(f"Vote {safe_option[:20]}", key=f"vote_{msg_id}_{option_name[:20]}"):
+                    MessageHandler.vote_poll(msg_id, option_name)
                     st.rerun()
             
             st.markdown(f"""
@@ -1126,43 +1155,13 @@ class UIComponents:
             """, unsafe_allow_html=True)
     
     @staticmethod
-    def render_media_card(msg: Dict):
-        """Render media card"""
-        with st.container():
-            username = msg["username"]
-            
-            st.markdown(f"""
-            <div class="feed-card animate-fade-in">
-                <div class="card-header">
-                    {UIComponents.render_avatar_html(username, 40)}
-                    <div class="card-user-info">
-                        <div class="card-username">@{username}</div>
-                        <div class="card-timestamp">{UIComponents.format_timestamp(msg.get('timestamp', ''))}</div>
-                    </div>
-                </div>
-            """, unsafe_allow_html=True)
-            
-            if msg.get("attachment") and msg.get("type") == "image":
-                st.markdown(f"""
-                <div class="media-card">
-                    <img src="{msg['attachment']}" class="media-artwork">
-                    <div class="media-info">
-                        <div class="media-title">{msg.get('attachment_name', 'Media')}</div>
-                        <div class="media-subtitle">Shared image</div>
-                    </div>
-                    <span style="color:#667eea;font-size:1.5rem;">▶️</span>
-                </div>
-                """, unsafe_allow_html=True)
-            
-            if msg.get("text"):
-                st.markdown(f'<div class="card-text">{msg["text"]}</div>', unsafe_allow_html=True)
-            
-            st.markdown('</div>', unsafe_allow_html=True)
-    
-    @staticmethod
     def render_profile_view():
         """Render profile page"""
-        profile = DataManager.get_user_profile(st.session_state.user)
+        current_user = st.session_state.get('user', '')
+        if not current_user:
+            return
+            
+        profile = DataManager.get_user_profile(current_user)
         stats = profile.get("stats", {})
         
         with st.container():
@@ -1171,10 +1170,10 @@ class UIComponents:
             # Profile header
             st.markdown(f"""
             <div class="glass-card" style="padding:2rem;text-align:center;margin-bottom:1rem;">
-                {UIComponents.render_avatar_html(st.session_state.user, 80)}
-                <h2 style="color:#f1f5f9;margin-top:1rem;">@{st.session_state.user}</h2>
-                <p style="color:#94a3b8;">{profile.get('status', 'No status set')}</p>
-                <p style="color:#64748b;margin-top:1rem;">{profile.get('bio', 'No bio yet')}</p>
+                {UIComponents.render_avatar_html(current_user, 80)}
+                <h2 style="color:#f1f5f9;margin-top:1rem;">@{current_user}</h2>
+                <p style="color:#94a3b8;">{html.escape(profile.get('status', 'No status set'))}</p>
+                <p style="color:#64748b;margin-top:1rem;">{html.escape(profile.get('bio', 'No bio yet'))}</p>
             </div>
             """, unsafe_allow_html=True)
             
@@ -1207,9 +1206,9 @@ class UIComponents:
                     
                     if st.form_submit_button("Save Profile", use_container_width=True):
                         profiles = DataManager.get_profiles()
-                        if st.session_state.user in profiles:
-                            profiles[st.session_state.user]["bio"] = html.escape(bio) if bio else ""
-                            profiles[st.session_state.user]["status"] = html.escape(status) if status else ""
+                        if current_user in profiles:
+                            profiles[current_user]["bio"] = html.escape(bio) if bio else ""
+                            profiles[current_user]["status"] = html.escape(status) if status else ""
                             
                             if avatar_file:
                                 try:
@@ -1224,9 +1223,9 @@ class UIComponents:
                                         img = img.convert("RGB")
                                     
                                     img.thumbnail((200, 200))
-                                    avatar_path = UPLOADS_DIR / f"{st.session_state.user}_avatar.jpg"
+                                    avatar_path = UPLOADS_DIR / f"{current_user}_avatar.jpg"
                                     img.save(avatar_path, "JPEG", quality=75)
-                                    profiles[st.session_state.user]["avatar"] = str(avatar_path)
+                                    profiles[current_user]["avatar"] = str(avatar_path)
                                 except Exception as e:
                                     st.error(f"Failed to process avatar: {e}")
                             
@@ -1235,18 +1234,12 @@ class UIComponents:
                             time.sleep(0.5)
                             st.rerun()
             
-            # User's recent posts
-            user_messages = [m for m in st.session_state.messages 
-                           if m["username"] == st.session_state.user][-10:]
-            
-            if user_messages:
-                st.markdown('<h3 style="color:#f1f5f9;margin-top:1.5rem;">Recent Posts</h3>', unsafe_allow_html=True)
-                for msg in reversed(user_messages):
-                    msg_type = msg.get("type", "text")
-                    if msg_type in ["text", "image", "file"]:
-                        UIComponents.render_feed_card(msg)
-                    elif msg_type == "poll":
-                        UIComponents.render_poll_card(msg)
+            # Sign out button
+            if st.button("🚪 Sign Out", use_container_width=True):
+                st.session_state.auth = False
+                st.session_state.user = ""
+                st.session_state.current_view = "feed"
+                st.rerun()
             
             st.markdown('</div>', unsafe_allow_html=True)
     
@@ -1259,17 +1252,8 @@ class UIComponents:
             st.markdown('<div class="main-content">', unsafe_allow_html=True)
             
             # Search bar
-            st.markdown("""
-            <div class="search-container">
-                <div class="search-input-wrapper">
-                    <span class="search-icon">🔍</span>
-                    <span style="color:#64748b;">Search members...</span>
-                </div>
-            </div>
-            """, unsafe_allow_html=True)
-            
-            search_query = st.text_input("Search", label_visibility="collapsed", 
-                                        placeholder="Search members...")
+            search_query = st.text_input("Search members", label_visibility="collapsed", 
+                                        placeholder="🔍 Search members...")
             
             filtered_users = [u for u in all_users 
                             if search_query.lower() in u.lower()] if search_query else all_users
@@ -1286,7 +1270,7 @@ class UIComponents:
                             pass
                     
                     dot_class = "online-dot" if is_online else "offline-dot"
-                    status_text = "Online" if is_online else profile.get("status", "Offline")
+                    status_text = "Online" if is_online else html.escape(profile.get("status", "Offline"))
                     
                     st.markdown(f"""
                     <div class="member-card">
@@ -1329,39 +1313,38 @@ class UIComponents:
             for i, theme in enumerate(themes):
                 gradient = f"linear-gradient(135deg, {theme['colors'][0]}, {theme['colors'][1]}, {theme['colors'][2]})"
                 
-                cols = st.columns([1])
-                with cols[0]:
-                    st.markdown(f"""
-                    <div class="theme-card" style="background:{gradient};">
-                        <div style="font-size:2rem;">{theme['icon']}</div>
-                        <div style="color:white;font-size:0.8rem;margin-top:0.5rem;">{theme['name']}</div>
-                    </div>
-                    """, unsafe_allow_html=True)
-                    
-                    if st.button(f"Apply", key=f"theme_{i}", use_container_width=True):
-                        st.success(f"{theme['name']} theme applied!")
-                        st.rerun()
+                st.markdown(f"""
+                <div class="theme-card" style="background:{gradient};">
+                    <div style="font-size:2rem;">{theme['icon']}</div>
+                    <div style="color:white;font-size:0.8rem;margin-top:0.5rem;">{theme['name']}</div>
+                </div>
+                """, unsafe_allow_html=True)
+                
+                if st.button(f"Apply {theme['name']}", key=f"theme_{i}"):
+                    st.success(f"{theme['name']} theme applied!")
+                    st.rerun()
             
             st.markdown('</div></div>', unsafe_allow_html=True)
     
     @staticmethod
     def render_create_modal():
         """Render create post modal"""
-        with st.container():
-            st.markdown("""
-            <div class="modal-overlay">
-                <div class="modal-content">
-                    <div class="modal-handle"></div>
-                    <h3 style="color:#f1f5f9;text-align:center;">Create Post</h3>
-            """, unsafe_allow_html=True)
-            
-            tab1, tab2 = st.tabs(["Text Post", "Poll"])
-            
-            with tab1:
-                with st.form("create_text_post", clear_on_submit=True):
-                    text = st.text_area("What's on your mind?", max_chars=1000, height=100)
-                    attachment = st.file_uploader("Add image", type=['png', 'jpg', 'jpeg', 'gif'])
-                    
+        st.markdown("""
+        <div class="modal-overlay">
+            <div class="modal-content">
+                <div class="modal-handle"></div>
+                <h3 style="color:#f1f5f9;text-align:center;">Create Post</h3>
+        """, unsafe_allow_html=True)
+        
+        tab1, tab2 = st.tabs(["Text Post", "Poll"])
+        
+        with tab1:
+            with st.form("create_text_post", clear_on_submit=True):
+                text = st.text_area("What's on your mind?", max_chars=1000, height=100)
+                attachment = st.file_uploader("Add image", type=['png', 'jpg', 'jpeg', 'gif'])
+                
+                col1, col2 = st.columns(2)
+                with col1:
                     if st.form_submit_button("Post", use_container_width=True):
                         att_data = None
                         att_name = None
@@ -1376,13 +1359,19 @@ class UIComponents:
                             MessageHandler.send_message(text, att_data, att_name)
                             st.session_state.show_create_modal = False
                             st.rerun()
-            
-            with tab2:
-                with st.form("create_poll", clear_on_submit=True):
-                    question = st.text_input("Poll question", max_chars=200)
-                    options_text = st.text_area("Options (one per line)", height=100,
-                                               placeholder="Option 1\nOption 2\nOption 3")
-                    
+                with col2:
+                    if st.form_submit_button("Cancel", use_container_width=True):
+                        st.session_state.show_create_modal = False
+                        st.rerun()
+        
+        with tab2:
+            with st.form("create_poll", clear_on_submit=True):
+                question = st.text_input("Poll question", max_chars=200)
+                options_text = st.text_area("Options (one per line)", height=100,
+                                           placeholder="Option 1\nOption 2\nOption 3")
+                
+                col1, col2 = st.columns(2)
+                with col1:
                     if st.form_submit_button("Create Poll", use_container_width=True):
                         if question and options_text:
                             options = [opt.strip() for opt in options_text.split('\n') if opt.strip()]
@@ -1392,20 +1381,23 @@ class UIComponents:
                                 st.rerun()
                             else:
                                 st.error("Add at least 2 options")
-            
-            st.markdown('</div></div>', unsafe_allow_html=True)
+                with col2:
+                    if st.form_submit_button("Cancel", use_container_width=True):
+                        st.session_state.show_create_modal = False
+                        st.rerun()
+        
+        st.markdown('</div></div>', unsafe_allow_html=True)
     
     @staticmethod
     def render_bottom_navigation():
         """Render the main bottom navigation bar"""
-        current = st.session_state.current_view
+        current = st.session_state.get('current_view', 'feed')
         
         with st.container():
-            cols = st.columns([1, 1, 1.2, 1, 1])
+            nav_cols = st.columns([1, 1, 1.2, 1, 1])
             
-            with cols[0]:
-                if st.button("🏠", key="nav_feed", use_container_width=True,
-                           help="Feed"):
+            with nav_cols[0]:
+                if st.button("🏠", key="nav_feed", use_container_width=True, help="Feed"):
                     st.session_state.current_view = "feed"
                     st.session_state.show_create_modal = False
                     st.rerun()
@@ -1413,9 +1405,8 @@ class UIComponents:
                     st.markdown('<div style="text-align:center;color:#667eea;font-size:0.6rem;">Feed</div>', 
                               unsafe_allow_html=True)
             
-            with cols[1]:
-                if st.button("👥", key="nav_members", use_container_width=True,
-                           help="Members"):
+            with nav_cols[1]:
+                if st.button("👥", key="nav_members", use_container_width=True, help="Members"):
                     st.session_state.current_view = "members"
                     st.session_state.show_create_modal = False
                     st.rerun()
@@ -1423,17 +1414,15 @@ class UIComponents:
                     st.markdown('<div style="text-align:center;color:#667eea;font-size:0.6rem;">Members</div>', 
                               unsafe_allow_html=True)
             
-            with cols[2]:
-                if st.button("➕", key="nav_create", use_container_width=True,
-                           help="Create"):
-                    st.session_state.show_create_modal = not st.session_state.show_create_modal
+            with nav_cols[2]:
+                if st.button("➕", key="nav_create", use_container_width=True, help="Create"):
+                    st.session_state.show_create_modal = not st.session_state.get('show_create_modal', False)
                     st.rerun()
                 st.markdown('<div style="text-align:center;color:#f093fb;font-size:0.6rem;">Create</div>', 
                           unsafe_allow_html=True)
             
-            with cols[3]:
-                if st.button("🎨", key="nav_themes", use_container_width=True,
-                           help="Themes"):
+            with nav_cols[3]:
+                if st.button("🎨", key="nav_themes", use_container_width=True, help="Themes"):
                     st.session_state.current_view = "themes"
                     st.session_state.show_create_modal = False
                     st.rerun()
@@ -1441,9 +1430,8 @@ class UIComponents:
                     st.markdown('<div style="text-align:center;color:#667eea;font-size:0.6rem;">Themes</div>', 
                               unsafe_allow_html=True)
             
-            with cols[4]:
-                if st.button("👤", key="nav_profile", use_container_width=True,
-                           help="Profile"):
+            with nav_cols[4]:
+                if st.button("👤", key="nav_profile", use_container_width=True, help="Profile"):
                     st.session_state.current_view = "profile"
                     st.session_state.show_create_modal = False
                     st.rerun()
@@ -1454,15 +1442,17 @@ class UIComponents:
     @staticmethod
     def format_timestamp(ts: str) -> str:
         """Format timestamp for display"""
+        if not ts:
+            return ""
         try:
             t = datetime.fromisoformat(ts)
-            diff = (datetime.now() - t).seconds
+            diff = (datetime.now() - t).total_seconds()
             if diff < 60:
                 return "just now"
             elif diff < 3600:
-                return f"{diff // 60}m ago"
+                return f"{int(diff // 60)}m ago"
             elif diff < 86400:
-                return f"{diff // 3600}h ago"
+                return f"{int(diff // 3600)}h ago"
             return t.strftime("%b %d")
         except:
             return ""
@@ -1511,9 +1501,14 @@ class AuthHandler:
 
 # ========== MAIN APP ==========
 def main():
+    # Ensure session state is initialized
+    init_session_state()
+    
+    # Inject global styles
     ThemeEngine.inject_global_styles()
     
-    if not st.session_state.auth:
+    # Route to appropriate view
+    if not st.session_state.get('auth', False):
         render_auth_screen()
     else:
         render_app_shell()
@@ -1543,6 +1538,7 @@ def render_auth_screen():
                     if success:
                         st.session_state.auth = True
                         st.session_state.user = result
+                        st.session_state.current_view = "feed"
                         st.rerun()
                     else:
                         st.error(result)
@@ -1566,18 +1562,22 @@ def render_app_shell():
     # Fixed top header
     UIComponents.render_top_header()
     
-    # Main content area
-    if st.session_state.current_view == "feed":
+    # Main content area routing
+    current_view = st.session_state.get('current_view', 'feed')
+    
+    if current_view == "feed":
         render_feed_view()
-    elif st.session_state.current_view == "profile":
+    elif current_view == "profile":
         UIComponents.render_profile_view()
-    elif st.session_state.current_view == "members":
+    elif current_view == "members":
         UIComponents.render_members_view()
-    elif st.session_state.current_view == "themes":
+    elif current_view == "themes":
         UIComponents.render_themes_view()
+    else:
+        render_feed_view()
     
     # Create modal overlay
-    if st.session_state.show_create_modal:
+    if st.session_state.get('show_create_modal', False):
         UIComponents.render_create_modal()
     
     # Spacer for bottom nav
@@ -1595,9 +1595,13 @@ def render_feed_view():
         UIComponents.render_stories_row()
         
         # Messages feed
-        messages = st.session_state.messages[-30:]
+        messages = st.session_state.get('messages', [])
+        if messages:
+            display_messages = messages[-30:]
+        else:
+            display_messages = []
         
-        if not messages:
+        if not display_messages:
             st.markdown("""
             <div class="empty-state">
                 <div class="empty-state-icon">✨</div>
@@ -1606,7 +1610,7 @@ def render_feed_view():
             </div>
             """, unsafe_allow_html=True)
         else:
-            for msg in reversed(messages):
+            for msg in reversed(display_messages):
                 msg_type = msg.get("type", "text")
                 
                 if msg_type in ["text", "image", "file"]:
@@ -1614,7 +1618,7 @@ def render_feed_view():
                 elif msg_type == "poll":
                     UIComponents.render_poll_card(msg)
                 elif msg_type == "media":
-                    UIComponents.render_media_card(msg)
+                    UIComponents.render_feed_card(msg)
         
         st.markdown('</div>', unsafe_allow_html=True)
 
