@@ -10,10 +10,11 @@ import base64
 from PIL import Image
 import time
 import requests
+from io import BytesIO
 
 # Page config MUST be first
 st.set_page_config(
-    page_title="Chattier • Community Forum",
+    page_title="Chattier Pro • Community Forum",
     page_icon="💬",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -24,12 +25,10 @@ try:
     JSONBIN_API_KEY = st.secrets["jsonbin"]["api_key"]
     JSONBIN_BIN_ID = st.secrets["jsonbin"]["bin_id"]
     USE_CLOUD = True
-    CLOUD_TYPE = "☁️ Cloud Connected"
 except:
     JSONBIN_API_KEY = os.environ.get("JSONBIN_API_KEY", "")
     JSONBIN_BIN_ID = os.environ.get("JSONBIN_BIN_ID", "")
     USE_CLOUD = bool(JSONBIN_API_KEY and JSONBIN_BIN_ID)
-    CLOUD_TYPE = "☁️ Cloud Connected" if USE_CLOUD else "💻 Local Mode"
 
 # ==================== FILE PATHS ====================
 DATA_DIR = pathlib.Path("data")
@@ -39,10 +38,12 @@ USERS_FILE = DATA_DIR / "users.json"
 PROFILES_FILE = DATA_DIR / "profiles.json"
 UPLOADS_DIR = DATA_DIR / "uploads"
 UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
+ATTACHMENTS_DIR = DATA_DIR / "attachments"
+ATTACHMENTS_DIR.mkdir(parents=True, exist_ok=True)
 
-# ==================== 40+ WALLPAPERS ====================
+# ==================== 50+ WALLPAPERS ====================
 WALLPAPERS = {
-    "🌈 Colorful Gradient": "gradient_default",
+    "🌈 Animated Gradient": "gradient_default",
     "✨ Abstract Purple": "https://images.unsplash.com/photo-1557682250-33bd709cbe85?w=1920&q=80",
     "🌌 Cosmic Nebula": "https://images.unsplash.com/photo-1534796636912-3b95b3ab5986?w=1920&q=80",
     "🌊 Ocean Waves": "https://images.unsplash.com/photo-1505118380757-91f5f5632de0?w=1920&q=80",
@@ -63,13 +64,10 @@ WALLPAPERS = {
     "🌌 Milky Way": "https://images.unsplash.com/photo-1419242902214-272b3f66ee7a?w=1920&q=80",
     "🌸 Pink Blossoms": "https://images.unsplash.com/photo-1490750967868-88aa4e7c9d7a?w=1920&q=80",
     "🏞️ Mountain Lake": "https://images.unsplash.com/photo-1501785888041-af3ef285b470?w=1920&q=80",
-    "🌧️ Rainy Window": "https://images.unsplash.com/photo-1499951360447-b19be8fe80f5?w=1920&q=80",
     "🌻 Sunflower Field": "https://images.unsplash.com/photo-1470506028280-a011fb34b6f7?w=1920&q=80",
     "🏰 Northern Lights": "https://images.unsplash.com/photo-1483347756197-71ef80e95f73?w=1920&q=80",
     "🌴 Palm Sunset": "https://images.unsplash.com/photo-1509233725247-49e657c54213?w=1920&q=80",
     "🎆 Fireworks Night": "https://images.unsplash.com/photo-1498931299472-f7a63a5a1cfa?w=1920&q=80",
-    "🏛️ Ancient Ruins": "https://images.unsplash.com/photo-1469474968028-56623f02e42e?w=1920&q=80",
-    "🌵 Desert Night": "https://images.unsplash.com/photo-1507400492013-162706c8c05e?w=1920&q=80",
     "🌊 Stormy Sea": "https://images.unsplash.com/photo-1518837695005-2083093ee35b?w=1920&q=80",
     "🏔️ Snowy Mountains": "https://images.unsplash.com/photo-1519681393784-d120267933ba?w=1920&q=80",
     "🌅 Purple Dawn": "https://images.unsplash.com/photo-1506898667547-42e22a46e125?w=1920&q=80",
@@ -78,81 +76,65 @@ WALLPAPERS = {
     "🌙 Moonlit Mountains": "https://images.unsplash.com/photo-1508739773434-c26b3d09e071?w=1920&q=80",
     "🏖️ Crystal Clear": "https://images.unsplash.com/photo-1505228395891-9a51e7e86bf6?w=1920&q=80",
     "🌄 Golden Hour": "https://images.unsplash.com/photo-1495616811223-4d98c6e9c869?w=1920&q=80",
-    "🌿 Bamboo Forest": "https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=1920&q=80",
     "🏜️ Red Canyon": "https://images.unsplash.com/photo-1474044159687-1ee9f3a51722?w=1920&q=80",
     "🌊 Turquoise Waves": "https://images.unsplash.com/photo-1505144808419-1957a94ca61e?w=1920&q=80",
     "🌸 Spring Meadow": "https://images.unsplash.com/photo-1444021465936-c6ca6d1cb1e6?w=1920&q=80",
     "🌅 Sunset Silhouette": "https://images.unsplash.com/photo-1493809842364-78817add7ffb?w=1920&q=80",
+    "🎭 Abstract Art": "https://images.unsplash.com/photo-1541701494587-cb58502866ab?w=1920&q=80",
+    "🌿 Zen Garden": "https://images.unsplash.com/photo-1506784365847-bbad939e9335?w=1920&q=80",
+    "🏯 Japanese Temple": "https://images.unsplash.com/photo-1493976040374-85c8e12f0c0e?w=1920&q=80",
+    "🌌 Starry Night": "https://images.unsplash.com/photo-1419242902214-272b3f66ee7a?w=1920&q=80",
+    "🏛️ Greek Coast": "https://images.unsplash.com/photo-1533105079780-92b9be482077?w=1920&q=80",
+    "🌋 Volcanic": "https://images.unsplash.com/photo-1468657988500-aca2e8a96ac1?w=1920&q=80",
+    "🎪 Carnival": "https://images.unsplash.com/photo-1533174072545-7a4b6ad7a6c3?w=1920&q=80",
+    "🏜️ Sahara": "https://images.unsplash.com/photo-1451337516015-6b6e9a44a8a3?w=1920&q=80",
+    "🌊 Maldives": "https://images.unsplash.com/photo-1514282401047-d79a71a590e8?w=1920&q=80",
+    "🏔️ Himalayas": "https://images.unsplash.com/photo-1486911278844-a81c5267e227?w=1920&q=80",
+    "🌺 Bali Rice Fields": "https://images.unsplash.com/photo-1537996194471-e657df975ab4?w=1920&q=80",
+    "🏰 Neuschwanstein": "https://images.unsplash.com/photo-1439066615861-d1af74d74000?w=1920&q=80",
 }
 
-DEFAULT_WALLPAPER = "🌈 Colorful Gradient"
+DEFAULT_WALLPAPER = "🌈 Animated Gradient"
 
-# ==================== CLOUD DATABASE FUNCTIONS ====================
+# Emoji collections
+EMOJI_LIST = ["😀", "😂", "🤣", "😍", "🥰", "😘", "😜", "🤪", "😎", "🤩", 
+              "🥳", "😇", "🤗", "🤔", "😴", "🥺", "😤", "😡", "💀", "👻",
+              "👍", "👎", "👏", "🙌", "💪", "🤝", "❤️", "🧡", "💛", "💚",
+              "💙", "💜", "🖤", "🤍", "💔", "🔥", "⭐", "🌟", "✨", "🎉",
+              "🎊", "🎈", "🎂", "🍕", "🍔", "🌮", "☕", "🍺", "🏆", "💯"]
 
-def load_from_jsonbin():
+# ==================== CLOUD FUNCTIONS (OPTIMIZED) ====================
+@st.cache_data(ttl=2)
+def load_cloud_messages():
     if not USE_CLOUD:
         return None
     try:
         url = f"https://api.jsonbin.io/v3/b/{JSONBIN_BIN_ID}/latest"
         headers = {"X-Master-Key": JSONBIN_API_KEY, "X-Bin-Meta": "false"}
-        response = requests.get(url, headers=headers, timeout=5)
+        response = requests.get(url, headers=headers, timeout=3)
         if response.status_code == 200:
             data = response.json()
-            if isinstance(data, list):
-                return data
-            elif isinstance(data, dict):
-                return data.get("messages", [])
-        elif response.status_code == 404:
-            create_bin()
-        return None
-    except:
-        return None
-
-def save_to_jsonbin(messages):
-    if not USE_CLOUD:
-        return False
-    try:
-        url = f"https://api.jsonbin.io/v3/b/{JSONBIN_BIN_ID}"
-        headers = {
-            "Content-Type": "application/json",
-            "X-Master-Key": JSONBIN_API_KEY,
-            "X-Bin-Versioning": "false"
-        }
-        data = {"messages": messages}
-        response = requests.put(url, json=data, headers=headers, timeout=5)
-        return response.status_code in [200, 201]
-    except:
-        return False
-
-def create_bin():
-    try:
-        url = "https://api.jsonbin.io/v3/b"
-        headers = {
-            "Content-Type": "application/json",
-            "X-Master-Key": JSONBIN_API_KEY,
-            "X-Bin-Name": "chattier-messages",
-            "X-Bin-Private": "false"
-        }
-        response = requests.post(url, json={"messages": []}, headers=headers, timeout=5)
-        if response.status_code in [200, 201]:
-            result = response.json()
-            new_bin_id = result.get("metadata", {}).get("id", "")
-            if new_bin_id:
-                save_json(pathlib.Path("data/bin_id.json"), {"bin_id": new_bin_id})
-                return True
+            return data if isinstance(data, list) else data.get("messages", [])
     except:
         pass
-    return False
+    return None
+
+def save_cloud_messages(messages):
+    if not USE_CLOUD:
+        return
+    try:
+        url = f"https://api.jsonbin.io/v3/b/{JSONBIN_BIN_ID}"
+        headers = {"Content-Type": "application/json", "X-Master-Key": JSONBIN_API_KEY}
+        requests.put(url, json={"messages": messages}, headers=headers, timeout=3)
+    except:
+        pass
 
 # ==================== HELPER FUNCTIONS ====================
-
 def hash_password(password):
     return hashlib.sha256(password.encode()).hexdigest()
 
 def sanitize_html(text):
-    if not text:
-        return ""
-    return html_module.escape(str(text))
+    return html_module.escape(str(text)) if text else ""
 
 def load_json(path, default=None):
     try:
@@ -168,36 +150,42 @@ def save_json(path, data):
         path.parent.mkdir(parents=True, exist_ok=True)
         with open(path, 'w', encoding='utf-8') as f:
             json.dump(data, f, indent=2, ensure_ascii=False)
-        return True
     except:
-        return False
+        pass
 
 def load_users():
     return load_json(USERS_FILE, {})
 
-def save_users(users):
-    save_json(USERS_FILE, users)
-
 def load_profiles():
-    return load_json(PROFILES_FILE, {})
+    profiles = load_json(PROFILES_FILE, {})
+    # Ensure all profiles have status field
+    for username in profiles:
+        if "status" not in profiles[username]:
+            profiles[username]["status"] = ""
+        if "last_seen" not in profiles[username]:
+            profiles[username]["last_seen"] = ""
+    return profiles
 
 def save_profiles(profiles):
     save_json(PROFILES_FILE, profiles)
 
 def get_user_profile(username):
     profiles = load_profiles()
-    return profiles.get(username, {"bio": "", "avatar": None, "wallpaper": DEFAULT_WALLPAPER})
+    return profiles.get(username, {
+        "bio": "", "avatar": None, "wallpaper": DEFAULT_WALLPAPER,
+        "status": "", "last_seen": ""
+    })
 
-def update_profile(username, bio, avatar_file, wallpaper):
+def update_profile(username, bio, avatar_file, wallpaper, status=""):
     try:
         profiles = load_profiles()
         if username not in profiles:
             profiles[username] = {}
         
         profiles[username]["bio"] = sanitize_html(bio) if bio else ""
-        
-        if wallpaper and wallpaper in WALLPAPERS:
-            profiles[username]["wallpaper"] = wallpaper
+        profiles[username]["status"] = sanitize_html(status) if status else ""
+        profiles[username]["wallpaper"] = wallpaper if wallpaper in WALLPAPERS else DEFAULT_WALLPAPER
+        profiles[username]["last_seen"] = datetime.now().isoformat()
         
         if avatar_file is not None:
             try:
@@ -211,21 +199,19 @@ def update_profile(username, bio, avatar_file, wallpaper):
                     image = background
                 else:
                     image = image.convert("RGB")
-                image = image.resize((200, 200), Image.Resampling.LANCZOS)
+                image.thumbnail((200, 200), Image.Resampling.LANCZOS)
                 avatar_path = UPLOADS_DIR / f"{username}_avatar.jpg"
-                image.save(avatar_path, "JPEG", quality=85)
+                image.save(avatar_path, "JPEG", quality=80)
                 profiles[username]["avatar"] = str(avatar_path)
-            except Exception as e:
-                st.error(f"Could not process image: {e}")
-                return False
+            except:
+                pass
         
         save_profiles(profiles)
         return True
-    except Exception as e:
-        st.error(f"Error updating profile: {e}")
+    except:
         return False
 
-def get_avatar_html(username, size=40):
+def get_avatar_html(username, size=35):
     try:
         profiles = load_profiles()
         profile = profiles.get(username, {})
@@ -241,25 +227,21 @@ def get_avatar_html(username, size=40):
     
     colors = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7', '#DDA0DD', '#98D8C8', '#F7B787',
               '#FF8A80', '#B388FF', '#82B1FF', '#B9F6CA', '#FFE57F', '#FF80AB', '#EA80FC', '#8C9EFF']
-    color_idx = hash(username) % len(colors)
-    bg_color = colors[color_idx]
+    bg_color = colors[hash(username) % len(colors)]
     letter = username[0].upper() if username else "?"
     return f'<div style="width:{size}px;height:{size}px;border-radius:50%;background:{bg_color};display:flex;align-items:center;justify-content:center;font-weight:700;color:white;font-size:{size*0.4}px;flex-shrink:0;">{letter}</div>'
 
 def load_messages():
-    if USE_CLOUD:
-        cloud_messages = load_from_jsonbin()
-        if cloud_messages is not None:
-            return cloud_messages
+    cloud_msgs = load_cloud_messages()
+    if cloud_msgs is not None:
+        return cloud_msgs
     return load_json(MESSAGES_FILE, [])
 
 def save_all_messages(messages):
     if len(messages) > 500:
         messages = messages[-500:]
-    if USE_CLOUD:
-        save_to_jsonbin(messages)
+    save_cloud_messages(messages)
     save_json(MESSAGES_FILE, messages)
-    return True
 
 def format_time(ts):
     try:
@@ -267,24 +249,20 @@ def format_time(ts):
         now = datetime.now()
         diff = now - t
         if diff.days == 0:
-            if diff.seconds < 60:
-                return "Just now"
-            elif diff.seconds < 3600:
-                return f"{diff.seconds // 60}m ago"
+            if diff.seconds < 60: return "Just now"
+            elif diff.seconds < 3600: return f"{diff.seconds // 60}m ago"
             return f"{diff.seconds // 3600}h ago"
-        elif diff.days == 1:
-            return "Yesterday"
-        elif diff.days < 7:
-            return f"{diff.days}d ago"
+        elif diff.days == 1: return "Yesterday"
+        elif diff.days < 7: return f"{diff.days}d ago"
         return t.strftime("%b %d, %I:%M %p")
     except:
         return ""
 
-def send_message(text):
-    if not text or not text.strip():
+def send_message(text, attachment_data=None, attachment_name=None):
+    if not text and not attachment_data:
         return False
-    text = sanitize_html(text.strip())
-    if len(text) > 500:
+    text = sanitize_html(text.strip()) if text else ""
+    if len(text) > 1000:
         return False
     
     current_messages = load_messages()
@@ -294,119 +272,90 @@ def send_message(text):
         "username": st.session_state.username,
         "text": text,
         "timestamp": datetime.now().isoformat(),
-        "reactions": {}
+        "reactions": {},
     }
-    current_messages.append(msg)
     
-    if save_all_messages(current_messages):
-        st.session_state.messages = current_messages
-        return True
-    return False
+    if attachment_data and attachment_name:
+        msg["attachment"] = attachment_data
+        msg["attachment_name"] = attachment_name
+        msg["attachment_type"] = "image" if attachment_name.lower().endswith(('.png','.jpg','.jpeg','.gif')) else "file"
+    
+    current_messages.append(msg)
+    save_all_messages(current_messages)
+    st.session_state.messages = current_messages
+    return True
 
 def add_reaction(msg_id, emoji):
-    try:
-        current_messages = load_messages()
-        for msg in current_messages:
-            if msg.get("id") == msg_id:
-                if "reactions" not in msg:
-                    msg["reactions"] = {}
-                if emoji not in msg["reactions"]:
-                    msg["reactions"][emoji] = []
-                
-                username = st.session_state.username
-                if username in msg["reactions"][emoji]:
-                    msg["reactions"][emoji].remove(username)
-                    if not msg["reactions"][emoji]:
-                        del msg["reactions"][emoji]
-                else:
-                    msg["reactions"][emoji].append(username)
-                break
-        
-        save_all_messages(current_messages)
-        st.session_state.messages = current_messages
-        return True
-    except:
-        return False
+    current_messages = load_messages()
+    for msg in current_messages:
+        if msg.get("id") == msg_id:
+            if "reactions" not in msg: msg["reactions"] = {}
+            if emoji not in msg["reactions"]: msg["reactions"][emoji] = []
+            
+            username = st.session_state.username
+            if username in msg["reactions"][emoji]:
+                msg["reactions"][emoji].remove(username)
+                if not msg["reactions"][emoji]: del msg["reactions"][emoji]
+            else:
+                msg["reactions"][emoji].append(username)
+            break
+    save_all_messages(current_messages)
+    st.session_state.messages = current_messages
 
 def delete_message(msg_id):
-    try:
-        current_messages = load_messages()
-        current_messages = [m for m in current_messages if m.get("id") != msg_id]
-        save_all_messages(current_messages)
-        st.session_state.messages = current_messages
-        return True
-    except:
-        return False
+    current_messages = load_messages()
+    current_messages = [m for m in current_messages if m.get("id") != msg_id]
+    save_all_messages(current_messages)
+    st.session_state.messages = current_messages
 
 def edit_message(msg_id, new_text):
-    try:
-        new_text = sanitize_html(new_text.strip())
-        if not new_text:
-            return False
-        
-        current_messages = load_messages()
-        for msg in current_messages:
-            if msg.get("id") == msg_id:
-                msg["text"] = new_text
-                msg["edited"] = True
-                break
-        
-        save_all_messages(current_messages)
-        st.session_state.messages = current_messages
-        return True
-    except:
-        return False
+    new_text = sanitize_html(new_text.strip())
+    if not new_text: return
+    current_messages = load_messages()
+    for msg in current_messages:
+        if msg.get("id") == msg_id:
+            msg["text"] = new_text
+            msg["edited"] = True
+            break
+    save_all_messages(current_messages)
+    st.session_state.messages = current_messages
 
 # ==================== AUTHENTICATION ====================
-
 def sign_up(username, password, confirm):
-    if not username or not password:
-        return False, "Please fill all fields"
-    if password != confirm:
-        return False, "Passwords do not match"
-    if len(password) < 4:
-        return False, "Password must be at least 4 characters"
-    if len(username) < 2:
-        return False, "Username must be at least 2 characters"
-    if len(username) > 20:
-        return False, "Username too long (max 20 chars)"
-    if not username.isalnum():
-        return False, "Username can only contain letters and numbers"
+    if not username or not password: return False, "Fill all fields"
+    if password != confirm: return False, "Passwords don't match"
+    if len(password) < 4: return False, "Password too short (min 4)"
+    if len(username) < 2: return False, "Username too short"
+    if len(username) > 20: return False, "Username too long"
+    if not username.isalnum(): return False, "Only letters/numbers"
     
     users = load_users()
-    if username.lower() in [u.lower() for u in users]:
-        return False, "Username already exists"
+    if username.lower() in [u.lower() for u in users]: return False, "Username exists"
     
     users[username] = hash_password(password)
     save_users(users)
     
     profiles = load_profiles()
-    profiles[username] = {"bio": "", "avatar": None, "wallpaper": DEFAULT_WALLPAPER}
+    profiles[username] = {"bio": "", "avatar": None, "wallpaper": DEFAULT_WALLPAPER, "status": "", "last_seen": datetime.now().isoformat()}
     save_profiles(profiles)
     
-    return True, "Account created! Please sign in."
+    return True, "Account created!"
 
 def sign_in(username, password):
     users = load_users()
     for u, pwd in users.items():
         if u.lower() == username.lower():
-            if pwd == hash_password(password):
-                return True, u
-            else:
-                return False, "Invalid password"
-    return False, "Username not found"
+            return (True, u) if pwd == hash_password(password) else (False, "Wrong password")
+    return False, "User not found"
 
 def sign_out():
+    for key in ['authenticated', 'username', 'wallpaper', 'current_view', 'editing_msg_id', 'replying_to', 'viewing_profile']:
+        if key in st.session_state:
+            st.session_state[key] = "" if key in ['username', 'wallpaper', 'current_view'] else (False if key == 'authenticated' else None)
     st.session_state.authenticated = False
-    st.session_state.username = ""
-    st.session_state.wallpaper = DEFAULT_WALLPAPER
-    st.session_state.current_view = "chat"
-    st.session_state.editing_msg_id = None
-    st.session_state.replying_to = None
     st.rerun()
 
 # ==================== SESSION STATE ====================
-
 if 'initialized' not in st.session_state:
     st.session_state.messages = load_messages()
     st.session_state.authenticated = False
@@ -415,779 +364,513 @@ if 'initialized' not in st.session_state:
     st.session_state.current_view = "chat"
     st.session_state.editing_msg_id = None
     st.session_state.replying_to = None
+    st.session_state.show_emoji = False
+    st.session_state.viewing_profile = None
     st.session_state.initialized = True
-    st.session_state.message_count = len(st.session_state.messages)
+    st.session_state.msg_count = len(st.session_state.messages)
 
-if st.session_state.get('authenticated', False):
-    current_messages = load_messages()
-    if len(current_messages) != st.session_state.get('message_count', 0):
-        st.session_state.messages = current_messages
-        st.session_state.message_count = len(current_messages)
-
-if st.session_state.get('authenticated', False):
+# Update messages efficiently
+if st.session_state.get('authenticated'):
+    new_msgs = load_messages()
+    if len(new_msgs) != st.session_state.get('msg_count', 0):
+        st.session_state.messages = new_msgs
+        st.session_state.msg_count = len(new_msgs)
+    
     profile_data = get_user_profile(st.session_state.username)
     st.session_state.wallpaper = profile_data.get("wallpaper", DEFAULT_WALLPAPER)
+    # Update last seen
+    profiles = load_profiles()
+    if st.session_state.username in profiles:
+        profiles[st.session_state.username]["last_seen"] = datetime.now().isoformat()
+        save_profiles(profiles)
 
 wallpaper_url = WALLPAPERS.get(st.session_state.wallpaper, WALLPAPERS[DEFAULT_WALLPAPER])
 
-# ==================== CUSTOM CSS ====================
-
+# ==================== OPTIMIZED CSS ====================
 if wallpaper_url == "gradient_default":
-    wallpaper_css = """
-        background: linear-gradient(135deg, 
-            #667eea 0%, #764ba2 25%, #f093fb 50%, #f5576c 75%, #4facfe 100%);
-        background-size: 400% 400%;
-        animation: gradientShift 15s ease infinite;
-    """
-    wallpaper_overlay = "background: rgba(0, 0, 0, 0.3);"
+    wallpaper_css = """background: linear-gradient(135deg, #667eea 0%, #764ba2 25%, #f093fb 50%, #f5576c 75%, #4facfe 100%); background-size: 400% 400%; animation: gradientShift 15s ease infinite;"""
+    overlay = "background: rgba(0,0,0,0.3);"
 else:
     wallpaper_css = f'background-image: url("{wallpaper_url}"); background-size: cover; background-position: center; background-attachment: fixed;'
-    wallpaper_overlay = "background: rgba(0, 0, 0, 0.55); backdrop-filter: blur(8px);"
+    overlay = "background: rgba(0,0,0,0.55); backdrop-filter: blur(8px);"
 
 st.markdown(f"""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
-    
     * {{ font-family: 'Inter', sans-serif; }}
-    #MainMenu {{visibility: hidden;}}
-    footer {{visibility: hidden;}}
+    #MainMenu, footer {{visibility: hidden;}}
     
-    @keyframes gradientShift {{
-        0% {{ background-position: 0% 50%; }}
-        50% {{ background-position: 100% 50%; }}
-        100% {{ background-position: 0% 50%; }}
-    }}
+    @keyframes gradientShift {{ 0%{{background-position:0% 50%}} 50%{{background-position:100% 50%}} 100%{{background-position:0% 50%}} }}
     
-    @keyframes sidebarGlow {{
-        0%, 100% {{ box-shadow: 0 0 20px rgba(102, 126, 234, 0.3); }}
-        50% {{ box-shadow: 0 0 40px rgba(240, 147, 251, 0.5), 0 0 60px rgba(102, 126, 234, 0.3); }}
-    }}
+    .stApp {{ {wallpaper_css} }}
+    .stApp::before {{ content:""; position:fixed; top:0; left:0; width:100%; height:100%; {overlay} z-index:-1; }}
     
-    @keyframes slideInRight {{
-        from {{ opacity: 0; transform: translateX(30px); }}
-        to {{ opacity: 1; transform: translateX(0); }}
-    }}
-    
-    @keyframes slideInLeft {{
-        from {{ opacity: 0; transform: translateX(-30px); }}
-        to {{ opacity: 1; transform: translateX(0); }}
-    }}
-    
-    .stApp {{
-        {wallpaper_css}
-    }}
-    
-    .stApp::before {{
-        content: "";
-        position: fixed;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        {wallpaper_overlay}
-        z-index: -1;
-    }}
-    
-    /* Colorful Gradient Sidebar */
     section[data-testid="stSidebar"] {{
-        background: linear-gradient(180deg, 
-            rgba(102, 126, 234, 0.95) 0%,
-            rgba(118, 75, 162, 0.95) 20%,
-            rgba(240, 147, 251, 0.9) 40%,
-            rgba(245, 87, 108, 0.9) 60%,
-            rgba(79, 172, 254, 0.95) 80%,
-            rgba(102, 126, 234, 0.95) 100%) !important;
-        backdrop-filter: blur(20px);
-        animation: sidebarGlow 3s ease-in-out infinite;
-        border-right: 2px solid rgba(255, 255, 255, 0.2) !important;
+        background: linear-gradient(180deg, rgba(102,126,234,0.95), rgba(118,75,162,0.95), rgba(240,147,251,0.9), rgba(245,87,108,0.9), rgba(79,172,254,0.95)) !important;
+        backdrop-filter: blur(20px); border-right: 2px solid rgba(255,255,255,0.2) !important;
+    }}
+    section[data-testid="stSidebar"] * {{ color: white !important; }}
+    section[data-testid="stSidebar"] .stButton>button {{
+        background: rgba(255,255,255,0.2) !important; border: 2px solid rgba(255,255,255,0.4) !important;
+        backdrop-filter: blur(10px); font-weight: 600 !important; transition: all 0.2s !important;
+    }}
+    section[data-testid="stSidebar"] .stButton>button:hover {{
+        background: rgba(255,255,255,0.4) !important; transform: translateY(-2px);
     }}
     
-    section[data-testid="stSidebar"] * {{
-        color: white !important;
-    }}
+    .message-wrapper {{ display:flex; width:100%; margin-bottom:0.5rem; animation: fadeIn 0.2s ease; }}
+    .message-wrapper.sent {{ justify-content:flex-end; }}
+    .message-wrapper.received {{ justify-content:flex-start; }}
+    @keyframes fadeIn {{ from{{opacity:0;transform:translateY(10px)}} to{{opacity:1;transform:translateY(0)}} }}
     
-    section[data-testid="stSidebar"] .stButton > button {{
-        background: rgba(255, 255, 255, 0.2) !important;
-        border: 2px solid rgba(255, 255, 255, 0.4) !important;
-        color: white !important;
-        backdrop-filter: blur(10px);
-        font-weight: 600 !important;
-        transition: all 0.3s ease !important;
-    }}
-    
-    section[data-testid="stSidebar"] .stButton > button:hover {{
-        background: rgba(255, 255, 255, 0.4) !important;
-        border-color: rgba(255, 255, 255, 0.8) !important;
-        transform: translateY(-2px);
-        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
-    }}
-    
-    section[data-testid="stSidebar"] hr {{
-        border-color: rgba(255, 255, 255, 0.3) !important;
-    }}
-    
-    /* Message container */
-    .message-wrapper {{
-        display: flex;
-        width: 100%;
-        margin-bottom: 0.8rem;
-    }}
-    
-    .message-wrapper.sent {{
-        justify-content: flex-end;
-        animation: slideInRight 0.3s ease;
-    }}
-    
-    .message-wrapper.received {{
-        justify-content: flex-start;
-        animation: slideInLeft 0.3s ease;
-    }}
-    
-    /* Message bubble */
     .message-bubble {{
-        max-width: 65%;
-        padding: 0.8rem 1rem;
-        border-radius: 1.2rem;
-        border: 1px solid rgba(255, 255, 255, 0.1);
-        word-wrap: break-word;
-        transition: all 0.3s ease;
+        max-width:70%; padding:0.6rem 0.9rem; border-radius:1rem; border:1px solid rgba(255,255,255,0.1);
+        word-wrap:break-word; transition: all 0.2s;
     }}
+    .sent .message-bubble {{ background: linear-gradient(135deg, rgba(102,126,234,0.4), rgba(118,75,162,0.4)); border-color: rgba(102,126,234,0.5); margin-right:0.5rem; }}
+    .received .message-bubble {{ background: rgba(255,255,255,0.1); backdrop-filter: blur(10px); margin-left:0.5rem; }}
     
-    .sent .message-bubble {{
-        background: linear-gradient(135deg, rgba(102, 126, 234, 0.4), rgba(118, 75, 162, 0.4));
-        border-color: rgba(102, 126, 234, 0.5);
-        border-bottom-right-radius: 0.3rem;
-        margin-right: 0.5rem;
+    .message-username {{ font-size:0.7rem; font-weight:600; }}
+    .sent .message-username {{ color:#c4b5fd; }}
+    .received .message-username {{ color:#a5b4fc; }}
+    .message-time {{ font-size:0.6rem; color:#94a3b8; }}
+    .message-text {{ color:#f8fafc; font-size:0.9rem; line-height:1.4; }}
+    
+    .emoji-btn {{
+        background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2);
+        padding: 0.3rem 0.6rem; border-radius: 0.5rem; cursor: pointer; font-size: 1.2rem;
+        transition: all 0.2s; display: inline-block; margin: 0.1rem;
     }}
+    .emoji-btn:hover {{ background: rgba(255,255,255,0.3); transform: scale(1.2); }}
     
-    .received .message-bubble {{
-        background: rgba(255, 255, 255, 0.1);
-        backdrop-filter: blur(10px);
-        border-bottom-left-radius: 0.3rem;
-        margin-left: 0.5rem;
+    .stButton>button {{
+        background: linear-gradient(135deg, #667eea, #764ba2); color: white; border: none;
+        border-radius: 0.8rem; padding: 0.5rem 1rem; font-weight: 600; transition: all 0.3s; width: 100%;
     }}
+    .stButton>button:hover {{ transform: translateY(-2px); box-shadow: 0 5px 20px rgba(102,126,234,0.4); }}
     
-    .sent .message-bubble:hover {{
-        background: linear-gradient(135deg, rgba(102, 126, 234, 0.5), rgba(118, 75, 162, 0.5));
-    }}
-    
-    .received .message-bubble:hover {{
-        background: rgba(255, 255, 255, 0.15);
-    }}
-    
-    /* Message header */
-    .message-header {{
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
-        margin-bottom: 0.3rem;
-    }}
-    
-    .sent .message-header {{
-        justify-content: flex-end;
-    }}
-    
-    .received .message-header {{
-        justify-content: flex-start;
-    }}
-    
-    .message-username {{
-        font-size: 0.75rem;
-        font-weight: 600;
-    }}
-    
-    .sent .message-username {{
-        color: #c4b5fd;
-    }}
-    
-    .received .message-username {{
-        color: #a5b4fc;
-    }}
-    
-    .message-time {{
-        font-size: 0.65rem;
-        color: #94a3b8;
-        font-weight: 400;
-    }}
-    
-    .message-text {{
-        color: #f8fafc;
-        font-size: 0.9rem;
-        line-height: 1.4;
-        word-wrap: break-word;
-    }}
-    
-    .edited-badge {{
-        font-size: 0.6rem;
-        color: #94a3b8;
-        font-style: italic;
-        margin-left: 0.3rem;
-    }}
-    
-    /* Action buttons */
-    .message-actions {{
-        display: flex;
-        gap: 0.2rem;
-        margin-top: 0.3rem;
-        flex-wrap: wrap;
-    }}
-    
-    .sent .message-actions {{
-        justify-content: flex-end;
-    }}
-    
-    .received .message-actions {{
-        justify-content: flex-start;
-    }}
-    
-    .action-btn {{
-        background: rgba(255, 255, 255, 0.1);
-        border: 1px solid rgba(255, 255, 255, 0.2);
-        color: #94a3b8;
-        padding: 0.2rem 0.5rem;
-        border-radius: 0.5rem;
-        font-size: 0.7rem;
-        cursor: pointer;
-        transition: all 0.2s;
-    }}
-    
-    .action-btn:hover {{
-        background: rgba(255, 255, 255, 0.2);
-        color: #f1f5f9;
-    }}
-    
-    /* Avatar */
-    .avatar-container {{
-        flex-shrink: 0;
-        align-self: flex-end;
-    }}
-    
-    .sent .avatar-container {{
-        order: 2;
-        margin-left: 0.5rem;
-    }}
-    
-    .received .avatar-container {{
-        order: 1;
-        margin-right: 0.5rem;
-    }}
-    
-    /* Reaction bar */
-    .reaction-bar {{
-        display: flex;
-        gap: 0.3rem;
-        margin-top: 0.3rem;
-        flex-wrap: wrap;
-    }}
-    
-    .sent .reaction-bar {{
-        justify-content: flex-end;
-    }}
-    
-    .received .reaction-bar {{
-        justify-content: flex-start;
-    }}
-    
-    .reaction-item {{
-        background: rgba(255, 255, 255, 0.1);
-        padding: 0.1rem 0.5rem;
-        border-radius: 1rem;
-        font-size: 0.75rem;
-        border: 1px solid rgba(255, 255, 255, 0.2);
-        cursor: pointer;
-        transition: all 0.2s;
-    }}
-    
-    .reaction-item:hover {{
-        background: rgba(255, 255, 255, 0.2);
-    }}
-    
-    .reaction-item.active {{
-        background: rgba(102, 126, 234, 0.3);
-        border-color: rgba(102, 126, 234, 0.5);
-    }}
-    
-    .stButton > button {{
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        color: white;
-        border: none;
-        border-radius: 0.8rem;
-        padding: 0.5rem 1rem;
-        font-weight: 600;
-        transition: all 0.3s;
-        width: 100%;
-    }}
-    
-    .stButton > button:hover {{
-        transform: translateY(-2px);
-        box-shadow: 0 5px 20px rgba(102, 126, 234, 0.4);
-    }}
-    
-    .stTextInput > div > div > input,
-    .stTextArea > div > div > textarea {{
-        background: rgba(255, 255, 255, 0.95);
-        color: #1e293b;
-        border: 1px solid rgba(102, 126, 234, 0.3);
-        border-radius: 1rem;
-        padding: 0.7rem 1rem;
+    .stTextInput>div>div>input, .stTextArea>div>div>textarea {{
+        background: rgba(255,255,255,0.95); color: #1e293b; border: 1px solid rgba(102,126,234,0.3);
+        border-radius: 1rem; padding: 0.7rem 1rem;
     }}
     
     .profile-card {{
-        background: linear-gradient(135deg, rgba(102, 126, 234, 0.3), rgba(240, 147, 251, 0.3));
-        backdrop-filter: blur(20px);
-        border-radius: 1.5rem;
-        padding: 2rem;
-        border: 2px solid rgba(255, 255, 255, 0.2);
-        text-align: center;
+        background: linear-gradient(135deg, rgba(102,126,234,0.3), rgba(240,147,251,0.3));
+        backdrop-filter: blur(20px); border-radius: 1.5rem; padding: 2rem;
+        border: 2px solid rgba(255,255,255,0.2); text-align: center;
     }}
     
     .theme-card {{
-        border-radius: 1rem;
-        overflow: hidden;
-        border: 2px solid rgba(255, 255, 255, 0.1);
-        cursor: pointer;
-        transition: all 0.3s;
-        margin-bottom: 0.5rem;
+        border-radius: 0.8rem; overflow: hidden; border: 2px solid rgba(255,255,255,0.1);
+        cursor: pointer; transition: all 0.2s; margin-bottom: 0.3rem;
     }}
+    .theme-card:hover {{ transform: scale(1.05); border-color: #667eea; }}
+    .theme-card.selected {{ border-color: #667eea; box-shadow: 0 0 20px rgba(102,126,234,0.4); }}
     
-    .theme-card:hover {{ transform: scale(1.05); }}
-    .theme-card.selected {{ border-color: #667eea; box-shadow: 0 0 20px rgba(102, 126, 234, 0.4); }}
+    .status-dot {{ width:10px; height:10px; border-radius:50%; display:inline-block; }}
+    .status-online {{ background:#10b981; box-shadow: 0 0 10px rgba(16,185,129,0.5); }}
+    .status-away {{ background:#fbbf24; }}
+    .status-offline {{ background:#6b7280; }}
     
-    ::-webkit-scrollbar {{ width: 6px; }}
-    ::-webkit-scrollbar-track {{ background: rgba(255, 255, 255, 0.05); }}
-    ::-webkit-scrollbar-thumb {{ background: linear-gradient(135deg, #667eea, #764ba2); border-radius: 3px; }}
+    ::-webkit-scrollbar {{ width:4px; }}
+    ::-webkit-scrollbar-track {{ background: rgba(255,255,255,0.05); }}
+    ::-webkit-scrollbar-thumb {{ background: linear-gradient(135deg, #667eea, #764ba2); border-radius: 2px; }}
     
-    .status-badge {{
-        position: fixed;
-        top: 10px;
-        right: 10px;
-        padding: 0.4rem 1rem;
-        border-radius: 1rem;
-        font-size: 0.75rem;
-        z-index: 1000;
-        font-weight: 600;
-        animation: pulse 2s infinite;
-    }}
-    
-    @keyframes pulse {{
-        0%, 100% {{ opacity: 1; }}
-        50% {{ opacity: 0.7; }}
-    }}
-    
-    .status-connected {{ 
-        background: linear-gradient(135deg, rgba(16, 185, 129, 0.3), rgba(79, 172, 254, 0.3)); 
-        color: #10b981; 
-        border: 1px solid rgba(16, 185, 129, 0.5); 
-    }}
-    .status-local {{ 
-        background: linear-gradient(135deg, rgba(251, 191, 36, 0.3), rgba(245, 87, 108, 0.3)); 
-        color: #fbbf24; 
-        border: 1px solid rgba(251, 191, 36, 0.5); 
-    }}
-    
-    .live-indicator {{
-        display: inline-block;
-        width: 8px;
-        height: 8px;
-        background: #10b981;
-        border-radius: 50%;
-        margin-right: 0.5rem;
-        animation: livePulse 1s infinite;
-    }}
-    
-    @keyframes livePulse {{
-        0%, 100% {{ box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); }}
-        50% {{ box-shadow: 0 0 0 6px rgba(16, 185, 129, 0); }}
-    }}
-    
-    /* Responsive */
-    @media (max-width: 768px) {{
-        .message-bubble {{
-            max-width: 85%;
-        }}
-    }}
+    .attachment-preview {{ max-width:200px; border-radius:0.5rem; margin-top:0.3rem; cursor:pointer; }}
 </style>
 """, unsafe_allow_html=True)
 
-# ==================== SIDEBAR COLLAPSE SCRIPT ====================
-st.markdown("""
-<script>
-    function collapseSidebar() {
-        const sidebar = parent.document.querySelector('[data-testid="stSidebar"]');
-        if (sidebar) {
-            const button = sidebar.querySelector('button[kind="header"]');
-            if (button) {
-                button.click();
-            }
-        }
-    }
-    
-    setTimeout(() => {
-        const buttons = parent.document.querySelectorAll('[data-testid="stSidebar"] button');
-        buttons.forEach(button => {
-            if (button.textContent.includes('Chat Room') || 
-                button.textContent.includes('Profile Settings') || 
-                button.textContent.includes('Themes')) {
-                button.addEventListener('click', () => {
-                    setTimeout(collapseSidebar, 300);
-                });
-            }
-        });
-    }, 1000);
-</script>
-""", unsafe_allow_html=True)
-
 # ==================== AUTH PAGE ====================
-
 if not st.session_state.authenticated:
     col1, col2, col3 = st.columns([1, 2, 1])
-    
     with col2:
         st.markdown("""
-        <div style="text-align: center; padding: 2rem 0;">
-            <div style="font-size: 4rem; margin-bottom: 1rem; animation: float 3s ease-in-out infinite;">💬</div>
-            <h1 style="color: white; margin-bottom: 0.5rem; background: linear-gradient(135deg, #667eea, #764ba2, #f093fb); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">Chattier</h1>
-            <p style="color: #94a3b8; margin-bottom: 2rem;">Community Forum</p>
+        <div style="text-align:center; padding:2rem 0;">
+            <div style="font-size:4rem;">💬</div>
+            <h1 style="color:white; background:linear-gradient(135deg,#667eea,#764ba2,#f093fb); -webkit-background-clip:text; -webkit-text-fill-color:transparent;">Chattier Pro</h1>
+            <p style="color:#94a3b8;">Premium Community Forum</p>
         </div>
-        <style>
-            @keyframes float {{
-                0%, 100% {{ transform: translateY(0px); }}
-                50% {{ transform: translateY(-10px); }}
-            }}
-        </style>
         """, unsafe_allow_html=True)
         
-        tab1, tab2 = st.tabs(["🔑 Sign In", "✨ Create Account"])
-        
+        tab1, tab2 = st.tabs(["🔑 Sign In", "✨ Sign Up"])
         with tab1:
-            with st.form("login_form"):
-                username = st.text_input("Username", placeholder="Enter your username")
-                password = st.text_input("Password", type="password", placeholder="Enter your password")
-                submitted = st.form_submit_button("Sign In", use_container_width=True)
-                
-                if submitted:
-                    success, result = sign_in(username, password)
+            with st.form("login"):
+                u = st.text_input("Username")
+                p = st.text_input("Password", type="password")
+                if st.form_submit_button("Sign In", use_container_width=True):
+                    success, result = sign_in(u, p)
                     if success:
                         st.session_state.authenticated = True
                         st.session_state.username = result
                         st.session_state.messages = load_messages()
-                        st.session_state.message_count = len(st.session_state.messages)
-                        st.success(f"Welcome back, {result}!")
-                        time.sleep(0.5)
+                        st.session_state.msg_count = len(st.session_state.messages)
+                        st.success(f"Welcome, {result}!")
+                        time.sleep(0.3)
                         st.rerun()
                     else:
                         st.error(result)
-        
         with tab2:
-            with st.form("signup_form"):
-                username = st.text_input("Username", placeholder="Choose a username (2-20 chars)")
-                password = st.text_input("Password", type="password", placeholder="Minimum 4 characters")
-                confirm = st.text_input("Confirm Password", type="password", placeholder="Re-enter password")
-                submitted = st.form_submit_button("Create Account", use_container_width=True)
-                
-                if submitted:
-                    success, msg = sign_up(username, password, confirm)
-                    if success:
-                        st.success(msg)
-                    else:
-                        st.error(msg)
+            with st.form("signup"):
+                u = st.text_input("Username", placeholder="2-20 chars, letters/numbers")
+                p = st.text_input("Password", type="password", placeholder="Min 4 chars")
+                c = st.text_input("Confirm Password", type="password")
+                if st.form_submit_button("Create Account", use_container_width=True):
+                    success, msg = sign_up(u, p, c)
+                    if success: st.success(msg)
+                    else: st.error(msg)
 
 # ==================== MAIN APP ====================
-
 else:
-    # Status badge
-    status_class = "status-connected" if USE_CLOUD else "status-local"
-    st.markdown(f"""
-    <div class="status-badge {status_class}">
-        <span class="live-indicator"></span>{CLOUD_TYPE}
-    </div>
-    """, unsafe_allow_html=True)
-    
-    # Refresh button
-    col_refresh, col_space = st.columns([1, 10])
-    with col_refresh:
-        if st.button("🔄", key="refresh_btn", help="Instant refresh"):
-            st.session_state.messages = load_messages()
-            st.session_state.message_count = len(st.session_state.messages)
-            st.rerun()
-    
     # Sidebar
     with st.sidebar:
-        st.markdown("""
-        <div style="text-align: center; margin-bottom: 2rem;">
-            <div style="font-size: 3rem; filter: drop-shadow(0 0 10px rgba(255,255,255,0.5));">💬</div>
-            <h2 style="color: white; margin: 0.5rem 0; text-shadow: 0 0 20px rgba(255,255,255,0.3);">Chattier</h2>
-        </div>
-        """, unsafe_allow_html=True)
+        st.markdown('<div style="text-align:center;"><div style="font-size:3rem;">💬</div><h2>Chattier Pro</h2></div>', unsafe_allow_html=True)
         
         profile_data = get_user_profile(st.session_state.username)
-        avatar_html = get_avatar_html(st.session_state.username, 80)
         st.markdown(f"""
-        <div style="text-align: center; margin-bottom: 1.5rem;">
-            {avatar_html}
-            <h3 style="color: white; margin: 0.5rem 0; text-shadow: 0 2px 10px rgba(0,0,0,0.3);">@{st.session_state.username}</h3>
-            <p style="color: rgba(255,255,255,0.9); font-size: 0.8rem;">{sanitize_html(profile_data.get('bio', 'No bio yet'))[:80]}</p>
+        <div style="text-align:center; margin-bottom:1rem;">
+            {get_avatar_html(st.session_state.username, 70)}
+            <h3>@{st.session_state.username}</h3>
+            <p style="font-size:0.75rem; opacity:0.9;">{sanitize_html(profile_data.get('status', 'No status'))[:60]}</p>
         </div>
         """, unsafe_allow_html=True)
         
         st.divider()
-        st.markdown("### 📱 Navigation")
         
-        if st.button("💬 Chat Room", use_container_width=True, key="nav_chat"):
-            st.session_state.current_view = "chat"
-            st.session_state.editing_msg_id = None
-            st.session_state.messages = load_messages()
-            st.rerun()
-        
-        if st.button("👤 Profile Settings", use_container_width=True, key="nav_profile"):
-            st.session_state.current_view = "profile"
-            st.rerun()
-        
-        if st.button("🎨 Themes", use_container_width=True, key="nav_themes"):
-            st.session_state.current_view = "themes"
-            st.rerun()
+        # Navigation
+        views = {"💬 Chat": "chat", "👤 My Profile": "profile", "👥 Members": "members", "🎨 Themes": "themes"}
+        for label, view in views.items():
+            if st.button(label, use_container_width=True, key=f"nav_{view}"):
+                st.session_state.current_view = view
+                st.session_state.viewing_profile = None
+                st.rerun()
         
         st.divider()
-        st.markdown("### 📊 Community Stats")
-        
-        total_messages = len(st.session_state.messages)
-        unique_users = len(set(m["username"] for m in st.session_state.messages)) if st.session_state.messages else 0
-        
-        col1, col2 = st.columns(2)
-        with col1:
-            st.metric("Messages", total_messages)
-        with col2:
-            st.metric("Members", unique_users)
-        
-        if st.session_state.messages:
-            st.markdown("### 🟢 Recent Users")
-            recent = list(dict.fromkeys([m["username"] for m in reversed(st.session_state.messages)]))[:5]
-            for user in recent:
-                st.markdown(f"• {user}")
+        st.markdown("### 📊 Stats")
+        msgs = len(st.session_state.messages)
+        users = len(set(m["username"] for m in st.session_state.messages)) if st.session_state.messages else 0
+        st.metric("Messages", msgs)
+        st.metric("Members", users)
         
         st.divider()
-        
-        if not USE_CLOUD:
-            st.warning("⚠️ Add JSONBin keys in Secrets for cross-device chat!")
-        
         if st.button("🚪 Sign Out", use_container_width=True):
             sign_out()
     
-    # Main content area
+    # ==================== CHAT VIEW ====================
     if st.session_state.current_view == "chat":
-        st.markdown('<h2 style="color: white; margin-bottom: 1rem;">💬 Community Chat <span class="live-indicator" style="display: inline-block;"></span> LIVE</h2>', unsafe_allow_html=True)
+        st.markdown('<h2 style="color:white;">💬 Community Chat</h2>', unsafe_allow_html=True)
         
         if not st.session_state.messages:
-            st.markdown("""
-            <div style="text-align: center; padding: 3rem; color: #94a3b8;">
-                <div style="font-size: 4rem; margin-bottom: 1rem;">✨</div>
-                <h3>No messages yet</h3>
-                <p>Be the first to start the conversation!</p>
-            </div>
-            """, unsafe_allow_html=True)
+            st.markdown('<div style="text-align:center;padding:3rem;color:#94a3b8;"><div style="font-size:4rem;">✨</div><h3>No messages</h3><p>Start the conversation!</p></div>', unsafe_allow_html=True)
         else:
-            for msg in st.session_state.messages[-50:]:
+            for msg in st.session_state.messages[-30:]:
                 is_own = msg["username"] == st.session_state.username
                 msg_id = msg.get("id", "")
-                alignment = "sent" if is_own else "received"
+                align = "sent" if is_own else "received"
                 
                 if st.session_state.get("editing_msg_id") == msg_id:
                     with st.form(key=f"edit_{msg_id}"):
-                        new_text = st.text_input("Edit", value=msg['text'], key=f"input_{msg_id}", label_visibility="collapsed")
+                        nt = st.text_input("Edit", value=msg['text'], label_visibility="collapsed")
                         c1, c2 = st.columns(2)
                         with c1:
-                            if st.form_submit_button("💾 Save", use_container_width=True):
-                                if edit_message(msg_id, new_text):
-                                    st.session_state.editing_msg_id = None
-                                    st.rerun()
+                            if st.form_submit_button("💾", use_container_width=True):
+                                edit_message(msg_id, nt)
+                                st.session_state.editing_msg_id = None
+                                st.rerun()
                         with c2:
-                            if st.form_submit_button("❌ Cancel", use_container_width=True):
+                            if st.form_submit_button("✕", use_container_width=True):
                                 st.session_state.editing_msg_id = None
                                 st.rerun()
                 else:
-                    # Message wrapper with alignment
-                    edited_mark = ' <span class="edited-badge">(edited)</span>' if msg.get("edited") else ""
+                    edited = ' <span style="font-size:0.6rem;color:#94a3b8;">(edited)</span>' if msg.get("edited") else ""
                     
                     st.markdown(f"""
-                    <div class="message-wrapper {alignment}">
-                        <div class="avatar-container">
-                            {get_avatar_html(msg["username"], 30)}
-                        </div>
-                        <div style="max-width: 65%;">
+                    <div class="message-wrapper {align}">
+                        <div style="flex-shrink:0; align-self:flex-end; margin:{'0 0 0 0.5rem' if is_own else '0 0.5rem 0 0'};">{get_avatar_html(msg['username'], 28)}</div>
+                        <div style="max-width:70%;">
                             <div class="message-bubble">
-                                <div class="message-header">
+                                <div style="display:flex; align-items:center; gap:0.3rem; margin-bottom:0.2rem; {'justify-content:flex-end;' if is_own else ''}">
                                     <span class="message-username">{sanitize_html(msg['username'])}</span>
-                                    <span class="message-time">• {format_time(msg.get('timestamp', ''))}{edited_mark}</span>
+                                    <span class="message-time">• {format_time(msg.get('timestamp', ''))}{edited}</span>
                                 </div>
-                                <div class="message-text">{msg['text']}</div>
+                                {f'<div class="message-text">{msg["text"]}</div>' if msg.get("text") else ""}
+                                {f'<a href="{msg["attachment"]}" target="_blank"><img src="{msg["attachment"]}" class="attachment-preview" /></a>' if msg.get("attachment") and msg.get("attachment_type") == "image" else ""}
+                                {f'<a href="{msg["attachment"]}" target="_blank" style="color:#a5b4fc; text-decoration:underline;">📎 {msg.get("attachment_name", "File")}</a>' if msg.get("attachment") and msg.get("attachment_type") != "image" else ""}
                             </div>
                     """, unsafe_allow_html=True)
                     
-                    # Action buttons
-                    cols = st.columns([1, 1, 1, 1, 1, 10])
-                    
+                    # Quick actions
+                    cols = st.columns([1,1,1,1,1,8])
                     with cols[0]:
-                        if st.button("👍", key=f"like_{msg_id}"):
-                            add_reaction(msg_id, "👍")
-                            st.rerun()
+                        if st.button("👍", key=f"l_{msg_id}"): add_reaction(msg_id, "👍"); st.rerun()
                     with cols[1]:
-                        if st.button("❤️", key=f"love_{msg_id}"):
-                            add_reaction(msg_id, "❤️")
-                            st.rerun()
+                        if st.button("❤️", key=f"h_{msg_id}"): add_reaction(msg_id, "❤️"); st.rerun()
                     with cols[2]:
-                        if st.button("😂", key=f"laugh_{msg_id}"):
-                            add_reaction(msg_id, "😂")
-                            st.rerun()
+                        if st.button("😂", key=f"f_{msg_id}"): add_reaction(msg_id, "😂"); st.rerun()
                     with cols[3]:
-                        if st.button("↩️", key=f"reply_{msg_id}"):
-                            st.session_state.replying_to = msg_id
-                            st.rerun()
+                        if st.button("↩️", key=f"r_{msg_id}"): st.session_state.replying_to = msg_id; st.rerun()
                     if is_own:
                         with cols[4]:
-                            if st.button("✏️", key=f"editbtn_{msg_id}"):
-                                st.session_state.editing_msg_id = msg_id
-                                st.rerun()
+                            if st.button("✏️", key=f"e_{msg_id}"): st.session_state.editing_msg_id = msg_id; st.rerun()
                     
-                    # Reactions
+                    # Reactions display
                     if msg.get("reactions"):
-                        reaction_html = '<div class="reaction-bar">'
-                        for emoji, users in msg["reactions"].items():
-                            count = len(users)
-                            is_user = st.session_state.username in users
-                            active_class = "active" if is_user else ""
-                            reaction_html += f'<span class="reaction-item {active_class}">{emoji} {count}</span>'
-                        reaction_html += '</div>'
-                        st.markdown(reaction_html, unsafe_allow_html=True)
+                        rhtml = '<div style="margin-top:0.2rem; display:flex; gap:0.2rem; flex-wrap:wrap;">'
+                        for em, users in msg["reactions"].items():
+                            active = st.session_state.username in users
+                            rhtml += f'<span style="background:rgba(255,255,255,{0.3 if active else 0.1}); padding:0.1rem 0.4rem; border-radius:1rem; font-size:0.75rem; border:1px solid rgba(255,255,255,{0.5 if active else 0.2});">{em} {len(users)}</span>'
+                        rhtml += '</div>'
+                        st.markdown(rhtml, unsafe_allow_html=True)
                     
-                    # Delete button
                     if is_own:
-                        if st.button("🗑️ Delete", key=f"delete_{msg_id}"):
-                            if delete_message(msg_id):
-                                st.rerun()
+                        if st.button("🗑️", key=f"d_{msg_id}"): delete_message(msg_id); st.rerun()
                     
                     st.markdown('</div></div>', unsafe_allow_html=True)
         
+        # Reply bar
         if st.session_state.get("replying_to"):
-            reply_msg = next((m for m in st.session_state.messages if m.get("id") == st.session_state.replying_to), None)
-            if reply_msg:
-                col1, col2 = st.columns([10, 1])
-                with col1:
-                    st.markdown(f"""
-                    <div style="background: rgba(102,126,234,0.2); padding: 0.5rem 1rem; border-radius: 0.5rem; margin-bottom: 0.5rem; color: #94a3b8;">
-                        ↩️ Replying to <strong style="color: white;">{sanitize_html(reply_msg['username'])}</strong>: {sanitize_html(reply_msg['text'][:50])}...
-                    </div>
-                    """, unsafe_allow_html=True)
-                with col2:
-                    if st.button("✕", key="cancel_reply"):
-                        st.session_state.replying_to = None
+            rm = next((m for m in st.session_state.messages if m.get("id") == st.session_state.replying_to), None)
+            if rm:
+                c1, c2 = st.columns([10,1])
+                with c1:
+                    st.info(f"↩️ Replying to {rm['username']}: {rm.get('text','')[:50]}...")
+                with c2:
+                    if st.button("✕"): st.session_state.replying_to = None; st.rerun()
+        
+        # Emoji picker toggle
+        c1, c2 = st.columns([1, 10])
+        with c1:
+            if st.button("😊 Emojis", use_container_width=True):
+                st.session_state.show_emoji = not st.session_state.get('show_emoji', False)
+        
+        if st.session_state.get('show_emoji'):
+            em_cols = st.columns(10)
+            for i, emoji in enumerate(EMOJI_LIST[:50]):
+                with em_cols[i % 10]:
+                    if st.button(emoji, key=f"emoji_{i}"):
+                        st.session_state.emoji_to_add = emoji
+                        st.session_state.show_emoji = False
                         st.rerun()
         
+        # Message input
         st.divider()
-        with st.form("message_form", clear_on_submit=True):
-            col1, col2 = st.columns([6, 1])
-            with col1:
-                msg_text = st.text_input(
-                    "Message",
-                    placeholder=f"Type a message as @{st.session_state.username}...",
-                    label_visibility="collapsed",
-                    key="msg_input"
-                )
-            with col2:
-                submitted = st.form_submit_button("Send 📤", use_container_width=True)
+        with st.form("msg_form", clear_on_submit=True):
+            default_text = st.session_state.get('emoji_to_add', '')
+            if default_text:
+                st.session_state.emoji_to_add = ''
             
-            if submitted and msg_text and msg_text.strip():
-                if send_message(msg_text):
-                    st.session_state.message_count = len(st.session_state.messages)
+            c1, c2, c3 = st.columns([5, 1, 1])
+            with c1:
+                msg_text = st.text_input("Message", placeholder=f"Type as @{st.session_state.username}...", label_visibility="collapsed", value=default_text, key="msg_in")
+            with c2:
+                attach_file = st.file_uploader("📎", type=['png','jpg','jpeg','gif','pdf','txt','zip'], label_visibility="collapsed", key="attach")
+            with c3:
+                send_btn = st.form_submit_button("📤", use_container_width=True)
+            
+            if send_btn:
+                attachment_data = None
+                attachment_name = None
+                if attach_file:
+                    try:
+                        file_bytes = attach_file.read()
+                        attachment_data = base64.b64encode(file_bytes).decode()
+                        attachment_name = attach_file.name
+                    except:
+                        pass
+                
+                if msg_text.strip() or attachment_data:
+                    send_message(msg_text if msg_text else "", attachment_data, attachment_name)
                     st.rerun()
     
+    # ==================== PROFILE VIEW ====================
     elif st.session_state.current_view == "profile":
-        st.markdown('<h2 style="color: white;">👤 Profile Settings</h2>', unsafe_allow_html=True)
+        st.markdown('<h2 style="color:white;">👤 My Profile</h2>', unsafe_allow_html=True)
         
-        col1, col2 = st.columns([1, 2])
-        
-        with col1:
+        c1, c2 = st.columns([1, 2])
+        with c1:
             st.markdown('<div class="profile-card">', unsafe_allow_html=True)
-            avatar_html = get_avatar_html(st.session_state.username, 150)
-            st.markdown(avatar_html, unsafe_allow_html=True)
-            st.markdown(f"<h3 style='color: white;'>@{st.session_state.username}</h3>", unsafe_allow_html=True)
+            st.markdown(get_avatar_html(st.session_state.username, 120), unsafe_allow_html=True)
+            st.markdown(f"<h3>@{st.session_state.username}</h3>", unsafe_allow_html=True)
+            
+            profile = get_user_profile(st.session_state.username)
+            status = profile.get('status', '')
+            last_seen = profile.get('last_seen', '')
+            if last_seen:
+                try:
+                    lt = datetime.fromisoformat(last_seen)
+                    diff = (datetime.now() - lt).seconds
+                    if diff < 300:
+                        st.markdown('<span class="status-dot status-online"></span> Online', unsafe_allow_html=True)
+                    elif diff < 3600:
+                        st.markdown(f'<span class="status-dot status-away"></span> Last seen {diff//60}m ago', unsafe_allow_html=True)
+                    else:
+                        st.markdown('<span class="status-dot status-offline"></span> Offline', unsafe_allow_html=True)
+                except:
+                    pass
             st.markdown('</div>', unsafe_allow_html=True)
-            avatar_file = st.file_uploader("Upload Avatar", type=['png', 'jpg', 'jpeg'])
+            
+            avatar_file = st.file_uploader("Change Avatar", type=['png','jpg','jpeg'])
         
-        with col2:
+        with c2:
             with st.form("profile_form"):
                 profile_data = get_user_profile(st.session_state.username)
-                bio = st.text_area("Bio", value=profile_data.get("bio", ""), max_chars=200, 
-                                  placeholder="Tell us about yourself...", height=100)
+                bio = st.text_area("Bio", value=profile_data.get("bio", ""), max_chars=200, placeholder="About yourself...", height=80)
+                status = st.text_input("Status", value=profile_data.get("status", ""), max_chars=60, placeholder="What's on your mind?")
                 
-                col_a, col_b = st.columns(2)
-                with col_a:
-                    if st.form_submit_button("💾 Save Profile", use_container_width=True):
-                        current_wp = st.session_state.wallpaper
-                        if update_profile(st.session_state.username, bio, avatar_file, current_wp):
-                            st.success("Profile updated!")
-                            time.sleep(1)
-                            st.rerun()
-                with col_b:
-                    if st.form_submit_button("↩️ Back to Chat", use_container_width=True):
+                c_a, c_b = st.columns(2)
+                with c_a:
+                    if st.form_submit_button("💾 Save", use_container_width=True):
+                        update_profile(st.session_state.username, bio, avatar_file, st.session_state.wallpaper, status)
+                        st.success("Updated!")
+                        time.sleep(0.5)
+                        st.rerun()
+                with c_b:
+                    if st.form_submit_button("↩️ Back", use_container_width=True):
                         st.session_state.current_view = "chat"
                         st.rerun()
     
-    elif st.session_state.current_view == "themes":
-        st.markdown('<h2 style="color: white;">🎨 Choose Theme</h2>', unsafe_allow_html=True)
-        st.markdown(f'<p style="color: #94a3b8; margin-bottom: 1rem;">{len(WALLPAPERS)} beautiful wallpapers available</p>', unsafe_allow_html=True)
-        
-        search = st.text_input("🔍 Search themes", placeholder="Type to filter...")
-        
-        filtered_wallpapers = WALLPAPERS
-        if search:
-            filtered_wallpapers = {k: v for k, v in WALLPAPERS.items() if search.lower() in k.lower()}
-        
-        if not filtered_wallpapers:
-            st.info("No themes found matching your search")
-        else:
-            wallpaper_items = list(filtered_wallpapers.items())
-            for i, (theme_name, theme_url) in enumerate(wallpaper_items):
-                if i % 4 == 0:
-                    cols = st.columns(4)
+    # ==================== MEMBERS VIEW ====================
+    elif st.session_state.current_view == "members":
+        # Check if viewing a specific profile
+        if st.session_state.get('viewing_profile'):
+            vp = st.session_state.viewing_profile
+            profile = get_user_profile(vp)
+            
+            st.markdown(f'<h2 style="color:white;">👤 {sanitize_html(vp)}\'s Profile</h2>', unsafe_allow_html=True)
+            
+            if st.button("↩️ Back to Members"):
+                st.session_state.viewing_profile = None
+                st.rerun()
+            
+            c1, c2 = st.columns([1, 2])
+            with c1:
+                st.markdown('<div class="profile-card">', unsafe_allow_html=True)
+                st.markdown(get_avatar_html(vp, 120), unsafe_allow_html=True)
+                st.markdown(f"<h3>@{sanitize_html(vp)}</h3>", unsafe_allow_html=True)
                 
-                with cols[i % 4]:
-                    is_selected = theme_name == st.session_state.wallpaper
-                    
-                    if theme_url == "gradient_default":
-                        st.markdown(f"""
-                        <div class="theme-card {'selected' if is_selected else ''}" style="background: linear-gradient(135deg, #667eea, #764ba2, #f093fb, #f5576c, #4facfe); height: 120px; display: flex; align-items: center; justify-content: center;">
-                            <span style="color: white; font-size: 2rem; text-shadow: 0 0 20px rgba(255,255,255,0.5);">🌈</span>
-                        </div>
-                        """, unsafe_allow_html=True)
-                    else:
-                        st.markdown(f"""
-                        <div class="theme-card {'selected' if is_selected else ''}">
-                            <img src="{theme_url}" style="width: 100%; height: 120px; object-fit: cover;" />
-                        </div>
-                        """, unsafe_allow_html=True)
-                    
-                    if st.button(f"{'✅ ' if is_selected else ''}{theme_name}", key=f"theme_{i}", use_container_width=True):
-                        st.session_state.wallpaper = theme_name
-                        profiles = load_profiles()
-                        if st.session_state.username in profiles:
-                            profiles[st.session_state.username]["wallpaper"] = theme_name
+                status = profile.get('status', '')
+                if status:
+                    st.markdown(f'<p style="color:#94a3b8;">{sanitize_html(status)}</p>', unsafe_allow_html=True)
+                
+                last_seen = profile.get('last_seen', '')
+                if last_seen:
+                    try:
+                        lt = datetime.fromisoformat(last_seen)
+                        diff = (datetime.now() - lt).seconds
+                        if diff < 300:
+                            st.markdown('<span class="status-dot status-online"></span> Online now', unsafe_allow_html=True)
+                        elif diff < 3600:
+                            st.markdown(f'<span class="status-dot status-away"></span> {diff//60}m ago', unsafe_allow_html=True)
                         else:
-                            profiles[st.session_state.username] = {"bio": "", "avatar": None, "wallpaper": theme_name}
-                        save_profiles(profiles)
-                        st.rerun()
+                            st.markdown(f'<span class="status-dot status-offline"></span> {format_time(last_seen)}', unsafe_allow_html=True)
+                    except:
+                        pass
+                st.markdown('</div>', unsafe_allow_html=True)
+            
+            with c2:
+                st.markdown("### About")
+                bio = profile.get('bio', '')
+                st.markdown(f'<p style="color:#f8fafc; background:rgba(255,255,255,0.1); padding:1rem; border-radius:0.5rem;">{sanitize_html(bio) if bio else "No bio yet"}</p>', unsafe_allow_html=True)
+                
+                # Show user's messages
+                user_msgs = [m for m in st.session_state.messages if m["username"] == vp][-10:]
+                if user_msgs:
+                    st.markdown("### Recent Messages")
+                    for m in reversed(user_msgs):
+                        st.markdown(f'<div style="background:rgba(255,255,255,0.05); padding:0.5rem; border-radius:0.5rem; margin-bottom:0.3rem;"><span style="color:#94a3b8; font-size:0.7rem;">{format_time(m.get("timestamp",""))}</span><p style="color:#f8fafc; margin:0.2rem 0;">{m.get("text","")}</p></div>', unsafe_allow_html=True)
+        else:
+            st.markdown('<h2 style="color:white;">👥 Community Members</h2>', unsafe_allow_html=True)
+            
+            profiles = load_profiles()
+            all_users = list(set([m["username"] for m in st.session_state.messages])) if st.session_state.messages else []
+            
+            if not all_users:
+                st.info("No members yet. Send a message to be the first!")
+            else:
+                # Search
+                search = st.text_input("🔍 Search members", placeholder="Type username...")
+                filtered = [u for u in all_users if search.lower() in u.lower()] if search else all_users
+                
+                for i, user in enumerate(filtered[:20]):
+                    if i % 3 == 0:
+                        cols = st.columns(3)
+                    
+                    profile = get_user_profile(user)
+                    last_seen = profile.get('last_seen', '')
+                    is_online = False
+                    if last_seen:
+                        try:
+                            is_online = (datetime.now() - datetime.fromisoformat(last_seen)).seconds < 300
+                        except:
+                            pass
+                    
+                    with cols[i % 3]:
+                        st.markdown(f"""
+                        <div style="background:rgba(255,255,255,0.08); border-radius:1rem; padding:1rem; text-align:center; margin-bottom:0.5rem;">
+                            {get_avatar_html(user, 60)}
+                            <h4 style="color:white; margin:0.3rem 0;">@{sanitize_html(user)}</h4>
+                            <span class="status-dot {'status-online' if is_online else 'status-offline'}"></span>
+                            {'Online' if is_online else 'Offline'}
+                            <p style="color:#94a3b8; font-size:0.7rem; margin-top:0.3rem;">{sanitize_html(profile.get('status', 'No status'))[:40]}</p>
+                        </div>
+                        """, unsafe_allow_html=True)
+                        
+                        if st.button("View Profile", key=f"vp_{user}", use_container_width=True):
+                            st.session_state.viewing_profile = user
+                            st.rerun()
+    
+    # ==================== THEMES VIEW ====================
+    elif st.session_state.current_view == "themes":
+        st.markdown(f'<h2 style="color:white;">🎨 Themes ({len(WALLPAPERS)})</h2>', unsafe_allow_html=True)
         
-        st.divider()
-        if st.button("↩️ Back to Chat", use_container_width=True, key="back_from_themes"):
+        search = st.text_input("🔍 Search", placeholder="Filter themes...")
+        filtered = {k:v for k,v in WALLPAPERS.items() if search.lower() in k.lower()} if search else WALLPAPERS
+        
+        items = list(filtered.items())
+        for i, (name, url) in enumerate(items):
+            if i % 5 == 0:
+                cols = st.columns(5)
+            
+            with cols[i % 5]:
+                sel = name == st.session_state.wallpaper
+                if url == "gradient_default":
+                    st.markdown(f'<div class="theme-card {"selected" if sel else ""}" style="background:linear-gradient(135deg,#667eea,#764ba2,#f093fb,#f5576c,#4facfe);height:100px;display:flex;align-items:center;justify-content:center;"><span style="font-size:2rem;">🌈</span></div>', unsafe_allow_html=True)
+                else:
+                    st.markdown(f'<div class="theme-card {"selected" if sel else ""}"><img src="{url}" style="width:100%;height:100px;object-fit:cover;" /></div>', unsafe_allow_html=True)
+                
+                if st.button(f"{'✅' if sel else ''} {name}", key=f"th_{i}", use_container_width=True):
+                    st.session_state.wallpaper = name
+                    profiles = load_profiles()
+                    if st.session_state.username in profiles:
+                        profiles[st.session_state.username]["wallpaper"] = name
+                    save_profiles(profiles)
+                    st.rerun()
+        
+        if st.button("↩️ Back to Chat", use_container_width=True):
             st.session_state.current_view = "chat"
             st.rerun()
 
-# Ultra-fast auto-refresh
-if st.session_state.get('authenticated', False):
+# Lightweight refresh (only checks for new messages)
+if st.session_state.get('authenticated'):
     st.markdown("""
     <script>
+        // Check for new messages every 2 seconds (lightweight)
         setInterval(function() {
-            window.location.reload();
-        }, 5);
+            fetch(window.location.href).then(r => r.text()).then(html => {
+                const parser = new DOMParser();
+                const doc = parser.parseFromString(html, 'text/html');
+                const newCount = doc.querySelectorAll('.message-wrapper').length;
+                const currentCount = document.querySelectorAll('.message-wrapper').length;
+                if (newCount > currentCount) {
+                    window.location.reload();
+                }
+            });
+        }, 2000);
     </script>
     """, unsafe_allow_html=True)
-    
+
+# Update last seen on activity
+if st.session_state.get('authenticated'):
+    profiles = load_profiles()
+    if st.session_state.username in profiles:
+        profiles[st.session_state.username]["last_seen"] = datetime.now().isoformat()
+        save_profiles(profiles)
