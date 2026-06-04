@@ -16,6 +16,7 @@ import logging
 import io
 import shutil
 
+# Must be first Streamlit command
 st.set_page_config(page_title="SocialHub Pro", page_icon="🌐", layout="wide", initial_sidebar_state="collapsed")
 
 # ========== CONSTANTS ==========
@@ -45,7 +46,11 @@ MAX_FILE_SIZE = 10 * 1024 * 1024
 MAX_AVATAR_SIZE = 5 * 1024 * 1024
 STORY_EXPIRY_HOURS = 24
 
-AVATAR_COLORS = ['#FF6B6B','#4ECDC4','#45B7D1','#96CEB4','#FFEAA7','#DDA0DD','#98D8C8','#F7B787','#FF8A80','#B388FF','#FF5722','#9C27B0','#3F51B5','#009688','#FF9800','#795548','#607D8B','#E91E63','#00BCD4','#8BC34A']
+AVATAR_COLORS = [
+    '#FF6B6B','#4ECDC4','#45B7D1','#96CEB4','#FFEAA7','#DDA0DD','#98D8C8',
+    '#F7B787','#FF8A80','#B388FF','#FF5722','#9C27B0','#3F51B5','#009688',
+    '#FF9800','#795548','#607D8B','#E91E63','#00BCD4','#8BC34A'
+]
 
 # ========== 20+ THEMES ==========
 THEMES = {
@@ -75,38 +80,38 @@ THEMES = {
     "peach": {"name": "Peach Dream", "icon": "🍑", "bg": "#1a0f0a", "card": "rgba(255,255,255,0.04)", "text": "#fff3e0", "secondary": "#ffcc80", "accent": "#ff7043", "gradient": "linear-gradient(135deg, #1a0f0a 0%, #2e1a0f 50%, #4e2d1a 100%)"},
 }
 
-# ========== 30 WALLPAPERS (Unsplash URLs) ==========
+# ========== 30 WALLPAPERS ==========
 WALLPAPERS = {
-    "wp_gradient": {"name": "🌈 Gradient", "url": None, "gradient": "linear-gradient(135deg, #667eea 0%, #764ba2 50%, #f093fb 100%)"},
-    "wp_purple": {"name": "✨ Purple Haze", "url": "https://images.unsplash.com/photo-1557682250-33bd709cbe85?w=800&q=60"},
-    "wp_nebula": {"name": "🌌 Nebula", "url": "https://images.unsplash.com/photo-1534796636912-3b95b3ab5986?w=800&q=60"},
-    "wp_ocean": {"name": "🌊 Ocean Waves", "url": "https://images.unsplash.com/photo-1505118380757-91f5f5632de0?w=800&q=60"},
-    "wp_stars": {"name": "🏔️ Starry Mountains", "url": "https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=800&q=60"},
-    "wp_cherry": {"name": "🌸 Cherry Blossoms", "url": "https://images.unsplash.com/photo-1522383225653-ed111181a951?w=800&q=60"},
-    "wp_sunset": {"name": "🌅 Sunset Beach", "url": "https://images.unsplash.com/photo-1534274988757-a28bf1a57c17?w=800&q=60"},
-    "wp_forest": {"name": "🌿 Forest Path", "url": "https://images.unsplash.com/photo-1470071459604-3b5ec3a7fe05?w=800&q=60"},
-    "wp_city": {"name": "🏙️ City Lights", "url": "https://images.unsplash.com/photo-1477959858617-67f85cf4f1df?w=800&q=60"},
-    "wp_lava": {"name": "🔥 Lava Flow", "url": "https://images.unsplash.com/photo-1550745165-9bc0b252726f?w=800&q=60"},
-    "wp_cyber": {"name": "🎨 Cyber Punk", "url": "https://images.unsplash.com/photo-1515634928625-85bc09c9cbba?w=800&q=60"},
-    "wp_beach": {"name": "🏝️ Tropical Beach", "url": "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=800&q=60"},
-    "wp_aurora": {"name": "❄️ Aurora Borealis", "url": "https://images.unsplash.com/photo-1483921020237-2ff51e8e4b22?w=800&q=60"},
-    "wp_autumn": {"name": "🍁 Autumn Leaves", "url": "https://images.unsplash.com/photo-1504208434309-cb69f4fe52b0?w=800&q=60"},
-    "wp_lavender": {"name": "💜 Lavender Fields", "url": "https://images.unsplash.com/photo-1505409859467-3a796fd5798e?w=800&q=60"},
-    "wp_alpine": {"name": "🏔️ Alpine Peak", "url": "https://images.unsplash.com/photo-1454496522488-7a8e488e8606?w=800&q=60"},
-    "wp_desert": {"name": "🌄 Desert Dunes", "url": "https://images.unsplash.com/photo-1509316785289-025f5b846b35?w=800&q=60"},
-    "wp_sunflower": {"name": "🌻 Sunflower Field", "url": "https://images.unsplash.com/photo-1470506028280-a011fb34b6f7?w=800&q=60"},
-    "wp_northern": {"name": "🏰 Northern Lights", "url": "https://images.unsplash.com/photo-1483347756197-71ef80e95f73?w=800&q=60"},
-    "wp_fireworks": {"name": "🎆 Fireworks", "url": "https://images.unsplash.com/photo-1498931299472-f7a63a5a1cfa?w=800&q=60"},
-    "wp_storm": {"name": "🌊 Stormy Sea", "url": "https://images.unsplash.com/photo-1518837695005-2083093ee35b?w=800&q=60"},
-    "wp_crystal": {"name": "🏖️ Crystal Waters", "url": "https://images.unsplash.com/photo-1505228395891-9a51e7e86bf6?w=800&q=60"},
-    "wp_canyon": {"name": "🏜️ Grand Canyon", "url": "https://images.unsplash.com/photo-1474044159687-1ee9f3a51722?w=800&q=60"},
-    "wp_turquoise": {"name": "🌊 Turquoise Bay", "url": "https://images.unsplash.com/photo-1505144808419-1957a94ca61e?w=800&q=60"},
-    "wp_meadow": {"name": "🌸 Mountain Meadow", "url": "https://images.unsplash.com/photo-1444021465936-c6ca6d1cb1e6?w=800&q=60"},
-    "wp_abstract": {"name": "🎭 Abstract Art", "url": "https://images.unsplash.com/photo-1541701494587-cb58502866ab?w=800&q=60"},
-    "wp_temple": {"name": "🏯 Japanese Temple", "url": "https://images.unsplash.com/photo-1493976040374-85c8e12f0c0e?w=800&q=60"},
-    "wp_greece": {"name": "🏛️ Santorini", "url": "https://images.unsplash.com/photo-1533105079780-92b9be482077?w=800&q=60"},
-    "wp_volcano": {"name": "🌋 Volcano", "url": "https://images.unsplash.com/photo-1468657988500-aca2e8a96ac1?w=800&q=60"},
-    "wp_sahara": {"name": "🏜️ Sahara Desert", "url": "https://images.unsplash.com/photo-1451337516015-6b6e9a44a8a3?w=800&q=60"},
+    "wp_gradient": {"name": "Gradient", "icon": "🌈", "url": None, "gradient": "linear-gradient(135deg, #667eea 0%, #764ba2 50%, #f093fb 100%)"},
+    "wp_purple": {"name": "Purple Haze", "icon": "✨", "url": "https://images.unsplash.com/photo-1557682250-33bd709cbe85?w=800&q=60"},
+    "wp_nebula": {"name": "Nebula", "icon": "🌌", "url": "https://images.unsplash.com/photo-1534796636912-3b95b3ab5986?w=800&q=60"},
+    "wp_ocean": {"name": "Ocean Waves", "icon": "🌊", "url": "https://images.unsplash.com/photo-1505118380757-91f5f5632de0?w=800&q=60"},
+    "wp_stars": {"name": "Starry Mountains", "icon": "🏔️", "url": "https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=800&q=60"},
+    "wp_cherry": {"name": "Cherry Blossoms", "icon": "🌸", "url": "https://images.unsplash.com/photo-1522383225653-ed111181a951?w=800&q=60"},
+    "wp_sunset": {"name": "Sunset Beach", "icon": "🌅", "url": "https://images.unsplash.com/photo-1534274988757-a28bf1a57c17?w=800&q=60"},
+    "wp_forest": {"name": "Forest Path", "icon": "🌿", "url": "https://images.unsplash.com/photo-1470071459604-3b5ec3a7fe05?w=800&q=60"},
+    "wp_city": {"name": "City Lights", "icon": "🏙️", "url": "https://images.unsplash.com/photo-1477959858617-67f85cf4f1df?w=800&q=60"},
+    "wp_lava": {"name": "Lava Flow", "icon": "🔥", "url": "https://images.unsplash.com/photo-1550745165-9bc0b252726f?w=800&q=60"},
+    "wp_cyber": {"name": "Cyber Punk", "icon": "🎨", "url": "https://images.unsplash.com/photo-1515634928625-85bc09c9cbba?w=800&q=60"},
+    "wp_beach": {"name": "Tropical Beach", "icon": "🏝️", "url": "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=800&q=60"},
+    "wp_aurora": {"name": "Aurora Borealis", "icon": "❄️", "url": "https://images.unsplash.com/photo-1483921020237-2ff51e8e4b22?w=800&q=60"},
+    "wp_autumn": {"name": "Autumn Leaves", "icon": "🍁", "url": "https://images.unsplash.com/photo-1504208434309-cb69f4fe52b0?w=800&q=60"},
+    "wp_lavender": {"name": "Lavender Fields", "icon": "💜", "url": "https://images.unsplash.com/photo-1505409859467-3a796fd5798e?w=800&q=60"},
+    "wp_alpine": {"name": "Alpine Peak", "icon": "🏔️", "url": "https://images.unsplash.com/photo-1454496522488-7a8e488e8606?w=800&q=60"},
+    "wp_desert": {"name": "Desert Dunes", "icon": "🌄", "url": "https://images.unsplash.com/photo-1509316785289-025f5b846b35?w=800&q=60"},
+    "wp_sunflower": {"name": "Sunflower Field", "icon": "🌻", "url": "https://images.unsplash.com/photo-1470506028280-a011fb34b6f7?w=800&q=60"},
+    "wp_northern": {"name": "Northern Lights", "icon": "🏰", "url": "https://images.unsplash.com/photo-1483347756197-71ef80e95f73?w=800&q=60"},
+    "wp_fireworks": {"name": "Fireworks", "icon": "🎆", "url": "https://images.unsplash.com/photo-1498931299472-f7a63a5a1cfa?w=800&q=60"},
+    "wp_storm": {"name": "Stormy Sea", "icon": "🌊", "url": "https://images.unsplash.com/photo-1518837695005-2083093ee35b?w=800&q=60"},
+    "wp_crystal": {"name": "Crystal Waters", "icon": "🏖️", "url": "https://images.unsplash.com/photo-1505228395891-9a51e7e86bf6?w=800&q=60"},
+    "wp_canyon": {"name": "Grand Canyon", "icon": "🏜️", "url": "https://images.unsplash.com/photo-1474044159687-1ee9f3a51722?w=800&q=60"},
+    "wp_turquoise": {"name": "Turquoise Bay", "icon": "🌊", "url": "https://images.unsplash.com/photo-1505144808419-1957a94ca61e?w=800&q=60"},
+    "wp_meadow": {"name": "Mountain Meadow", "icon": "🌸", "url": "https://images.unsplash.com/photo-1444021465936-c6ca6d1cb1e6?w=800&q=60"},
+    "wp_abstract": {"name": "Abstract Art", "icon": "🎭", "url": "https://images.unsplash.com/photo-1541701494587-cb58502866ab?w=800&q=60"},
+    "wp_temple": {"name": "Japanese Temple", "icon": "🏯", "url": "https://images.unsplash.com/photo-1493976040374-85c8e12f0c0e?w=800&q=60"},
+    "wp_greece": {"name": "Santorini", "icon": "🏛️", "url": "https://images.unsplash.com/photo-1533105079780-92b9be482077?w=800&q=60"},
+    "wp_volcano": {"name": "Volcano", "icon": "🌋", "url": "https://images.unsplash.com/photo-1468657988500-aca2e8a96ac1?w=800&q=60"},
+    "wp_sahara": {"name": "Sahara Desert", "icon": "🏜️", "url": "https://images.unsplash.com/photo-1451337516015-6b6e9a44a8a3?w=800&q=60"},
 }
 
 # ========== UTILITY FUNCTIONS ==========
@@ -119,20 +124,27 @@ def validate_image(data: bytes) -> bool:
         return False
 
 def sanitize_text(text: str, max_length: int = 2000) -> str:
-    if not text: return ""
+    if not text:
+        return ""
     text = ''.join(c for c in text if ord(c) >= 32 or c == '\n')
     return html.escape(str(text).strip())[:max_length]
 
 def format_timestamp(ts: str) -> str:
-    if not ts: return ""
+    if not ts:
+        return ""
     try:
         t = datetime.fromisoformat(ts)
         diff = (datetime.now() - t).total_seconds()
-        if diff < 5: return "now"
-        elif diff < 60: return f"{int(diff)}s"
-        elif diff < 3600: return f"{int(diff//60)}m"
-        elif diff < 86400: return f"{int(diff//3600)}h"
-        elif diff < 604800: return f"{int(diff//86400)}d"
+        if diff < 5:
+            return "now"
+        elif diff < 60:
+            return f"{int(diff)}s"
+        elif diff < 3600:
+            return f"{int(diff//60)}m"
+        elif diff < 86400:
+            return f"{int(diff//3600)}h"
+        elif diff < 604800:
+            return f"{int(diff//86400)}d"
         return t.strftime("%b %d")
     except:
         return ""
@@ -141,13 +153,16 @@ def generate_id() -> str:
     return str(uuid.uuid4())
 
 def get_avatar_color(username: str) -> str:
-    if not username: return AVATAR_COLORS[0]
+    if not username:
+        return AVATAR_COLORS[0]
     return AVATAR_COLORS[hash(username) % len(AVATAR_COLORS)]
 
 def get_initials(username: str) -> str:
-    if not username: return "?"
+    if not username:
+        return "?"
     parts = username.split('_')
-    if len(parts) > 1: return (parts[0][0] + parts[1][0]).upper()[:2]
+    if len(parts) > 1:
+        return (parts[0][0] + parts[1][0]).upper()[:2]
     return username[0].upper()
 
 def atomic_save(filepath: pathlib.Path, data: Any) -> bool:
@@ -169,44 +184,48 @@ logger = logging.getLogger(__name__)
 class DataManager:
     @staticmethod
     def load(filepath: pathlib.Path, default=None):
-        if default is None: default = {}
+        if default is None:
+            default = {}
         try:
             if filepath.exists():
                 with open(filepath, 'r', encoding='utf-8') as f:
                     return json.load(f)
-        except: pass
+        except:
+            pass
         return default
-    
+
     @staticmethod
     def save(filepath: pathlib.Path, data) -> bool:
         return atomic_save(filepath, data)
-    
+
     @staticmethod
     def hash_password(pwd: str, salt: str = None) -> Tuple[str, str]:
-        if salt is None: salt = secrets.token_hex(16)
+        if salt is None:
+            salt = secrets.token_hex(16)
         h = hashlib.pbkdf2_hmac('sha256', pwd.encode(), salt.encode(), 100000)
         return h.hex(), salt
-    
+
     @staticmethod
     def verify_password(pwd: str, stored_hash: str, salt: str) -> bool:
         h, _ = DataManager.hash_password(pwd, salt)
         return h == stored_hash
-    
+
     @staticmethod
     def get_users() -> Dict:
         return DataManager.load(USERS_FILE, {})
-    
+
     @staticmethod
     def save_users(data: Dict):
         DataManager.save(USERS_FILE, data)
-    
+
     @staticmethod
     def user_exists(username: str) -> bool:
         return username.lower() in [u.lower() for u in DataManager.get_users()]
-    
+
     @staticmethod
     def create_user(username: str, password: str) -> Tuple[bool, str]:
-        if DataManager.user_exists(username): return False, "Username exists"
+        if DataManager.user_exists(username):
+            return False, "Username exists"
         users = DataManager.get_users()
         h, s = DataManager.hash_password(password)
         users[username] = {"password": h, "salt": s, "created_at": datetime.now().isoformat()}
@@ -215,7 +234,7 @@ class DataManager:
         profiles[username] = DataManager._default_profile(username)
         DataManager.save_profiles(profiles)
         return True, "Account created!"
-    
+
     @staticmethod
     def authenticate(username: str, password: str) -> Tuple[bool, str]:
         users = DataManager.get_users()
@@ -231,26 +250,34 @@ class DataManager:
                     return True, un
                 return False, "Wrong password"
         return False, "User not found"
-    
+
     @staticmethod
     def _default_profile(username: str) -> Dict:
         return {
-            "display_name": username, "bio": "", "avatar": None,
-            "website": "", "location": "", "is_verified": False,
-            "last_seen": "", "followers": [], "following": [],
-            "blocked": [], "post_count": 0,
-            "theme": "midnight", "wallpaper": "wp_gradient",
+            "display_name": username,
+            "bio": "",
+            "avatar": None,
+            "website": "",
+            "location": "",
+            "is_verified": False,
+            "last_seen": "",
+            "followers": [],
+            "following": [],
+            "blocked": [],
+            "post_count": 0,
+            "theme": "midnight",
+            "wallpaper": "wp_gradient",
             "created_at": datetime.now().isoformat()
         }
-    
+
     @staticmethod
     def get_profiles() -> Dict:
         return DataManager.load(PROFILES_FILE, {})
-    
+
     @staticmethod
     def save_profiles(data: Dict):
         DataManager.save(PROFILES_FILE, data)
-    
+
     @staticmethod
     def get_profile(username: str) -> Dict:
         profiles = DataManager.get_profiles()
@@ -258,41 +285,44 @@ class DataManager:
             profiles[username] = DataManager._default_profile(username)
             DataManager.save_profiles(profiles)
         p = profiles[username]
-        for k, v in DataManager._default_profile(username).items():
-            if k not in p: p[k] = v
+        defaults = DataManager._default_profile(username)
+        for k, v in defaults.items():
+            if k not in p:
+                p[k] = v
         return p
-    
+
     @staticmethod
     def update_profile(username: str, updates: Dict):
         profiles = DataManager.get_profiles()
         if username in profiles:
             profiles[username].update(updates)
             DataManager.save_profiles(profiles)
-    
+
     @staticmethod
     def update_last_seen(username: str):
         profiles = DataManager.get_profiles()
         if username in profiles:
             profiles[username]["last_seen"] = datetime.now().isoformat()
             DataManager.save_profiles(profiles)
-    
+
     @staticmethod
     def get_feed_posts() -> List:
         return DataManager.load(FEED_POSTS_FILE, [])
-    
+
     @staticmethod
     def save_feed_posts(data: List):
-        if len(data) > 500: data = data[-300:]
+        if len(data) > 500:
+            data = data[-300:]
         DataManager.save(FEED_POSTS_FILE, data)
-    
+
     @staticmethod
     def get_stories() -> Dict:
         return DataManager.load(STORIES_FILE, {})
-    
+
     @staticmethod
     def save_stories(data: Dict):
         DataManager.save(STORIES_FILE, data)
-    
+
     @staticmethod
     def get_active_stories() -> Dict:
         stories = DataManager.get_stories()
@@ -300,68 +330,70 @@ class DataManager:
         cutoff = (datetime.now() - timedelta(hours=STORY_EXPIRY_HOURS)).isoformat()
         for u, ss in stories.items():
             a = [s for s in ss if s.get("timestamp", "") > cutoff]
-            if a: active[u] = a
+            if a:
+                active[u] = a
         return active
-    
+
     @staticmethod
     def get_direct_messages() -> Dict:
         return DataManager.load(DIRECT_MESSAGES_FILE, {})
-    
+
     @staticmethod
     def save_direct_messages(data: Dict):
         DataManager.save(DIRECT_MESSAGES_FILE, data)
-    
+
     @staticmethod
     def get_chat_id(u1: str, u2: str) -> str:
         return f"chat_{'_'.join(sorted([u1, u2]))}"
-    
+
     @staticmethod
     def get_group_chats() -> Dict:
         return DataManager.load(GROUP_CHATS_FILE, {})
-    
+
     @staticmethod
     def save_group_chats(data: Dict):
         DataManager.save(GROUP_CHATS_FILE, data)
-    
+
     @staticmethod
     def get_channels() -> Dict:
         return DataManager.load(CHANNELS_FILE, {})
-    
+
     @staticmethod
     def save_channels(data: Dict):
         DataManager.save(CHANNELS_FILE, data)
-    
+
     @staticmethod
     def get_comments() -> Dict:
         return DataManager.load(COMMENTS_FILE, {})
-    
+
     @staticmethod
     def save_comments(data: Dict):
         DataManager.save(COMMENTS_FILE, data)
-    
+
     @staticmethod
     def get_notifications() -> Dict:
         return DataManager.load(NOTIFICATIONS_FILE, {})
-    
+
     @staticmethod
     def save_notifications(data: Dict):
         DataManager.save(NOTIFICATIONS_FILE, data)
-    
+
     @staticmethod
     def add_notification(username: str, ntype: str, message: str, from_user: str = ""):
         notifs = DataManager.get_notifications()
-        if username not in notifs: notifs[username] = []
+        if username not in notifs:
+            notifs[username] = []
         notifs[username].insert(0, {
             "id": generate_id(), "type": ntype, "message": message,
             "from_user": from_user, "timestamp": datetime.now().isoformat(), "read": False
         })
         notifs[username] = notifs[username][:50]
         DataManager.save_notifications(notifs)
-    
+
     @staticmethod
     def get_unread_count(username: str) -> int:
         return sum(1 for n in DataManager.get_notifications().get(username, []) if not n.get("read"))
-    
+
     @staticmethod
     def get_online_users() -> List[str]:
         profiles = DataManager.get_profiles()
@@ -372,7 +404,8 @@ class DataManager:
                 try:
                     if (now - datetime.fromisoformat(p["last_seen"])).total_seconds() < 300:
                         online.append(u)
-                except: pass
+                except:
+                    pass
         return online
 
 # ========== HANDLERS ==========
@@ -380,7 +413,8 @@ class PostHandler:
     @staticmethod
     def create(text: str, media_data: str = None, media_name: str = None) -> Tuple[bool, str]:
         text = sanitize_text(text, MAX_POST_LENGTH) if text else ""
-        if not text and not media_data: return False, "Empty post"
+        if not text and not media_data:
+            return False, "Empty post"
         posts = DataManager.get_feed_posts()
         post = {
             "id": generate_id(), "username": st.session_state.user,
@@ -394,20 +428,25 @@ class PostHandler:
         posts.append(post)
         DataManager.save_feed_posts(posts)
         st.session_state.feed_posts = posts
+        p = DataManager.get_profile(st.session_state.user)
+        p["post_count"] = p.get("post_count", 0) + 1
+        DataManager.save_profiles(DataManager.get_profiles())
         return True, "Posted!"
-    
+
     @staticmethod
     def like(post_id: str):
         posts = DataManager.get_feed_posts()
         for post in posts:
             if post["id"] == post_id:
                 u = st.session_state.user
-                if u in post.get("likes", []): post["likes"].remove(u)
-                else: post["likes"].append(u)
+                if u in post.get("likes", []):
+                    post["likes"].remove(u)
+                else:
+                    post["likes"].append(u)
                 DataManager.save_feed_posts(posts)
                 st.session_state.feed_posts = posts
                 return
-    
+
     @staticmethod
     def delete(post_id: str) -> bool:
         posts = DataManager.get_feed_posts()
@@ -418,12 +457,13 @@ class PostHandler:
                 st.session_state.feed_posts = posts
                 return True
         return False
-    
+
     @staticmethod
     def create_poll(question: str, options: List[str]) -> Tuple[bool, str]:
         question = sanitize_text(question, 500)
         options = [sanitize_text(o, 100) for o in options if o.strip()]
-        if len(options) < 2: return False, "Need 2+ options"
+        if len(options) < 2:
+            return False, "Need 2+ options"
         posts = DataManager.get_feed_posts()
         posts.append({
             "id": generate_id(), "username": st.session_state.user,
@@ -433,7 +473,7 @@ class PostHandler:
         DataManager.save_feed_posts(posts)
         st.session_state.feed_posts = posts
         return True, "Poll created!"
-    
+
     @staticmethod
     def vote_poll(post_id: str, option: str):
         posts = DataManager.get_feed_posts()
@@ -442,9 +482,12 @@ class PostHandler:
             if post["id"] == post_id and post.get("type") == "poll":
                 pd = post["poll_data"]
                 for o, v in pd["options"].items():
-                    if u in v: v.remove(u); pd["total_votes"] -= 1
+                    if u in v:
+                        v.remove(u)
+                        pd["total_votes"] -= 1
                 if option in pd["options"]:
-                    pd["options"][option].append(u); pd["total_votes"] += 1
+                    pd["options"][option].append(u)
+                    pd["total_votes"] += 1
                 DataManager.save_feed_posts(posts)
                 st.session_state.feed_posts = posts
                 return
@@ -454,7 +497,8 @@ class StoryHandler:
     def create(media_data: str, media_name: str) -> Tuple[bool, str]:
         stories = DataManager.get_stories()
         u = st.session_state.user
-        if u not in stories: stories[u] = []
+        if u not in stories:
+            stories[u] = []
         cutoff = (datetime.now() - timedelta(hours=STORY_EXPIRY_HOURS)).isoformat()
         stories[u] = [s for s in stories[u] if s["timestamp"] > cutoff]
         stories[u].append({
@@ -470,7 +514,8 @@ class ChatHandler:
     @staticmethod
     def send(to_user: str, text: str) -> Tuple[bool, str]:
         text = sanitize_text(text, MAX_MESSAGE_LENGTH)
-        if not text: return False, "Empty message"
+        if not text:
+            return False, "Empty message"
         from_user = st.session_state.user
         chat_id = DataManager.get_chat_id(from_user, to_user)
         dms = DataManager.get_direct_messages()
@@ -483,18 +528,19 @@ class ChatHandler:
         DataManager.save_direct_messages(dms)
         DataManager.add_notification(to_user, "message", f"New message from @{from_user}", from_user)
         return True, "Sent!"
-    
+
     @staticmethod
     def get_messages(with_user: str) -> List:
         chat_id = DataManager.get_chat_id(st.session_state.user, with_user)
         dms = DataManager.get_direct_messages()
         if chat_id in dms:
             for m in dms[chat_id]["messages"]:
-                if m.get("to") == st.session_state.user: m["read"] = True
+                if m.get("to") == st.session_state.user:
+                    m["read"] = True
             DataManager.save_direct_messages(dms)
             return dms[chat_id]["messages"]
         return []
-    
+
     @staticmethod
     def get_chat_list() -> List[Dict]:
         u = st.session_state.user
@@ -511,7 +557,8 @@ class ChatHandler:
                     "with_user": other,
                     "last_message": last["text"][:40] if last and last.get("text") else "Media",
                     "last_time": last["timestamp"] if last else cd["created_at"],
-                    "unread": unread, "is_online": other in online
+                    "unread": unread,
+                    "is_online": other in online
                 })
         chats.sort(key=lambda x: x["last_time"], reverse=True)
         return chats
@@ -520,31 +567,45 @@ class GroupHandler:
     @staticmethod
     def create_group(name: str, members: List[str], is_channel: bool = False) -> Tuple[bool, str]:
         name = sanitize_text(name, 50)
-        if not name: return False, "Name required"
+        if not name:
+            return False, "Name required"
         all_members = list(set(members + [st.session_state.user]))
         gid = f"{'channel' if is_channel else 'group'}_{generate_id()[:8]}"
         data = {"name": name, "admins": [st.session_state.user], "messages": [], "created_at": datetime.now().isoformat()}
         if is_channel:
-            data["owner"] = st.session_state.user; data["subscribers"] = all_members
-            channels = DataManager.get_channels(); channels[gid] = data; DataManager.save_channels(channels)
+            data["owner"] = st.session_state.user
+            data["subscribers"] = all_members
+            channels = DataManager.get_channels()
+            channels[gid] = data
+            DataManager.save_channels(channels)
         else:
             data["members"] = all_members
-            groups = DataManager.get_group_chats(); groups[gid] = data; DataManager.save_group_chats(groups)
+            groups = DataManager.get_group_chats()
+            groups[gid] = data
+            DataManager.save_group_chats(groups)
             for m in members:
-                if m != st.session_state.user: DataManager.add_notification(m, "group_invite", f"Added to '{name}'", st.session_state.user)
+                if m != st.session_state.user:
+                    DataManager.add_notification(m, "group_invite", f"Added to '{name}'", st.session_state.user)
         return True, f"{'Channel' if is_channel else 'Group'} created!"
-    
+
     @staticmethod
     def send_message(group_id: str, text: str, is_channel: bool = False) -> Tuple[bool, str]:
         text = sanitize_text(text, MAX_MESSAGE_LENGTH)
-        if not text: return False, "Empty message"
+        if not text:
+            return False, "Empty message"
         data = DataManager.get_channels() if is_channel else DataManager.get_group_chats()
-        if group_id not in data: return False, "Not found"
-        data[group_id]["messages"].append({"id": generate_id(), "from": st.session_state.user, "text": text, "timestamp": datetime.now().isoformat()})
-        if is_channel: DataManager.save_channels(data)
-        else: DataManager.save_group_chats(data)
+        if group_id not in data:
+            return False, "Not found"
+        data[group_id]["messages"].append({
+            "id": generate_id(), "from": st.session_state.user,
+            "text": text, "timestamp": datetime.now().isoformat()
+        })
+        if is_channel:
+            DataManager.save_channels(data)
+        else:
+            DataManager.save_group_chats(data)
         return True, "Sent!"
-    
+
     @staticmethod
     def get_user_groups() -> List[Dict]:
         u = st.session_state.user
@@ -552,11 +613,17 @@ class GroupHandler:
         result = []
         for gid, gd in groups.items():
             if u in gd.get("members", []):
-                msgs = gd["messages"]; last = msgs[-1] if msgs else None
-                result.append({"id": gid, "name": gd["name"], "members": len(gd.get("members", [])), "last_message": last["text"][:30] if last and last.get("text") else "No messages", "last_time": last["timestamp"] if last else gd["created_at"]})
+                msgs = gd["messages"]
+                last = msgs[-1] if msgs else None
+                result.append({
+                    "id": gid, "name": gd["name"],
+                    "members": len(gd.get("members", [])),
+                    "last_message": last["text"][:30] if last and last.get("text") else "No messages",
+                    "last_time": last["timestamp"] if last else gd["created_at"]
+                })
         result.sort(key=lambda x: x["last_time"], reverse=True)
         return result
-    
+
     @staticmethod
     def get_user_channels() -> List[Dict]:
         u = st.session_state.user
@@ -564,15 +631,21 @@ class GroupHandler:
         result = []
         for cid, cd in channels.items():
             if u in cd.get("subscribers", []):
-                msgs = cd["messages"]; last = msgs[-1] if msgs else None
-                result.append({"id": cid, "name": cd["name"], "subscribers": len(cd.get("subscribers", [])), "last_message": last["text"][:30] if last and last.get("text") else "No posts", "last_time": last["timestamp"] if last else cd["created_at"]})
+                msgs = cd["messages"]
+                last = msgs[-1] if msgs else None
+                result.append({
+                    "id": cid, "name": cd["name"],
+                    "subscribers": len(cd.get("subscribers", [])),
+                    "last_message": last["text"][:30] if last and last.get("text") else "No posts",
+                    "last_time": last["timestamp"] if last else cd["created_at"]
+                })
         result.sort(key=lambda x: x["last_time"], reverse=True)
         return result
-    
+
     @staticmethod
     def get_group_messages(group_id: str) -> List:
         return DataManager.get_group_chats().get(group_id, {}).get("messages", [])
-    
+
     @staticmethod
     def get_channel_messages(channel_id: str) -> List:
         return DataManager.get_channels().get(channel_id, {}).get("messages", [])
@@ -581,13 +654,18 @@ class CommentHandler:
     @staticmethod
     def add(post_id: str, text: str) -> Tuple[bool, str]:
         text = sanitize_text(text, 500)
-        if not text: return False, "Empty comment"
+        if not text:
+            return False, "Empty comment"
         comments = DataManager.get_comments()
-        if post_id not in comments: comments[post_id] = []
-        comments[post_id].append({"id": generate_id(), "username": st.session_state.user, "text": text, "timestamp": datetime.now().isoformat(), "likes": []})
+        if post_id not in comments:
+            comments[post_id] = []
+        comments[post_id].append({
+            "id": generate_id(), "username": st.session_state.user,
+            "text": text, "timestamp": datetime.now().isoformat(), "likes": []
+        })
         DataManager.save_comments(comments)
         return True, "Comment added!"
-    
+
     @staticmethod
     def get(post_id: str) -> List:
         return DataManager.get_comments().get(post_id, [])
@@ -595,34 +673,53 @@ class CommentHandler:
 class FollowHandler:
     @staticmethod
     def follow(target: str) -> Tuple[bool, str]:
-        if target == st.session_state.user: return False, "Cannot follow yourself"
+        if target == st.session_state.user:
+            return False, "Cannot follow yourself"
         profiles = DataManager.get_profiles()
         up = DataManager.get_profile(st.session_state.user)
         tp = DataManager.get_profile(target)
+        # Ensure all keys exist
         for p in [up, tp]:
-            if "following" not in p: p["following"] = []
-            if "followers" not in p: p["followers"] = []
-            if "blocked" not in p: p["blocked"] = []
+            if "following" not in p:
+                p["following"] = []
+            if "followers" not in p:
+                p["followers"] = []
+            if "blocked" not in p:
+                p["blocked"] = []
         if target in up["following"]:
-            up["following"].remove(target); tp["followers"].remove(st.session_state.user); action = "Unfollowed"
+            up["following"].remove(target)
+            tp["followers"].remove(st.session_state.user)
+            action = "Unfollowed"
         else:
-            up["following"].append(target); tp["followers"].append(st.session_state.user); action = "Following"
+            up["following"].append(target)
+            tp["followers"].append(st.session_state.user)
+            action = "Following"
             DataManager.add_notification(target, "follow", f"@{st.session_state.user} followed you", st.session_state.user)
-        profiles[st.session_state.user] = up; profiles[target] = tp
+        profiles[st.session_state.user] = up
+        profiles[target] = tp
         DataManager.save_profiles(profiles)
         return True, f"{action}!"
-    
+
     @staticmethod
     def is_following(target: str) -> bool:
         return target in DataManager.get_profile(st.session_state.user).get("following", [])
 
 # ========== SESSION STATE ==========
 def init_session():
-    defaults = {'feed_posts': [], 'stories': {}, 'auth': False, 'user': "", 'current_tab': "feed", 'active_chat': None, 'active_group': None, 'active_channel': None, 'show_create_modal': False, 'show_new_chat': False, 'show_new_group': False, 'show_new_channel': False, 'show_comments_for': None}
+    defaults = {
+        'feed_posts': [], 'stories': {}, 'auth': False, 'user': "",
+        'current_tab': "feed", 'active_chat': None, 'active_group': None,
+        'active_channel': None, 'show_create_modal': False,
+        'show_new_chat': False, 'show_new_group': False, 'show_new_channel': False,
+        'show_comments_for': None,
+    }
     for k, v in defaults.items():
-        if k not in st.session_state: st.session_state[k] = v
-    if not st.session_state.feed_posts: st.session_state.feed_posts = DataManager.get_feed_posts()
-    if not st.session_state.stories: st.session_state.stories = DataManager.get_stories()
+        if k not in st.session_state:
+            st.session_state[k] = v
+    if not st.session_state.feed_posts:
+        st.session_state.feed_posts = DataManager.get_feed_posts()
+    if not st.session_state.stories:
+        st.session_state.stories = DataManager.get_stories()
 
 init_session()
 if st.session_state.get('auth'):
@@ -634,27 +731,28 @@ def get_current_theme() -> Dict:
     if st.session_state.get('auth'):
         profile = DataManager.get_profile(st.session_state.user)
         theme_key = profile.get('theme', 'midnight')
-        if theme_key in THEMES: return THEMES[theme_key]
+        if theme_key in THEMES:
+            return THEMES[theme_key]
     return THEMES['midnight']
 
 def get_current_wallpaper() -> Dict:
     if st.session_state.get('auth'):
         profile = DataManager.get_profile(st.session_state.user)
         wp_key = profile.get('wallpaper', 'wp_gradient')
-        if wp_key in WALLPAPERS: return WALLPAPERS[wp_key]
+        if wp_key in WALLPAPERS:
+            return WALLPAPERS[wp_key]
     return WALLPAPERS['wp_gradient']
 
-# ========== CSS ==========
+# ========== CSS STYLES ==========
 def inject_styles():
     theme = get_current_theme()
     wallpaper = get_current_wallpaper()
-    
-    # Determine background
+
     if wallpaper.get("url"):
         bg_style = f"url('{wallpaper['url']}') center/cover no-repeat fixed"
     else:
         bg_style = wallpaper.get("gradient", theme["gradient"])
-    
+
     st.markdown(f"""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
@@ -662,35 +760,35 @@ def inject_styles():
     #MainMenu, footer, header {{ visibility: hidden; }}
     section[data-testid="stSidebar"] {{ display: none; }}
     .stDeployButton, [data-testid="stDecoration"], [data-testid="stStatusWidget"] {{ display: none; }}
-    
+
     html, body {{ height: 100vh; width: 100vw; margin: 0; padding: 0; overflow: hidden; position: fixed; }}
-    
+
     .stApp {{
         background: {bg_style} !important;
         height: 100vh; width: 100vw; overflow: hidden; position: fixed; top: 0; left: 0;
     }}
-    
+
     .block-container {{ height: 100vh; overflow: hidden; padding: 0; max-width: 100%; }}
-    
+
     .app-header {{
         position: fixed; top: 0; left: 0; right: 0; height: 50px;
         background: {theme['bg']}dd; backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
         border-bottom: 1px solid rgba(255,255,255,0.06); padding: 0 16px; z-index: 1000;
         display: flex; align-items: center; justify-content: space-between;
     }}
-    
+
     .app-logo {{ font-size: 1.2rem; font-weight: 800; background: linear-gradient(135deg, #667eea, #764ba2, #f093fb); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }}
     .badge {{ background: #ef4444; color: white; border-radius: 50%; padding: 1px 6px; font-size: 0.6rem; font-weight: 700; position: absolute; top: -8px; right: -10px; }}
-    
+
     .main-content {{ position: fixed; top: 50px; bottom: 60px; left: 0; right: 0; overflow-y: auto; padding: 12px 16px; }}
     .content-wrapper {{ max-width: 650px; margin: 0 auto; }}
-    
+
     .bottom-nav {{
         position: fixed; bottom: 0; left: 0; right: 0; height: 60px;
         background: {theme['bg']}dd; backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
         border-top: 1px solid rgba(255,255,255,0.06); display: flex; align-items: center; justify-content: space-around; z-index: 1000;
     }}
-    
+
     .card {{ background: {theme['card']}; border: 1px solid rgba(255,255,255,0.06); border-radius: 14px; margin-bottom: 12px; overflow: hidden; }}
     .card-header {{ display: flex; align-items: center; padding: 10px 12px; gap: 10px; }}
     .avatar {{ width: 36px; height: 36px; border-radius: 50%; object-fit: cover; border: 2px solid {theme['accent']}44; flex-shrink: 0; }}
@@ -700,11 +798,11 @@ def inject_styles():
     .post-text {{ color: #e2e8f0; font-size: 0.9rem; line-height: 1.5; padding: 0 12px 8px 12px; word-wrap: break-word; }}
     .post-media {{ width: 100%; max-height: 350px; object-fit: cover; }}
     .post-actions {{ display: flex; align-items: center; padding: 6px 12px; gap: 4px; border-top: 1px solid rgba(255,255,255,0.04); }}
-    
+
     .chat-bubble {{ max-width: 80%; padding: 10px 14px; border-radius: 16px; font-size: 0.85rem; line-height: 1.4; margin: 3px 0; word-wrap: break-word; }}
     .chat-bubble.sent {{ background: linear-gradient(135deg, #667eea, #764ba2); color: white; align-self: flex-end; border-bottom-right-radius: 4px; }}
     .chat-bubble.received {{ background: rgba(255,255,255,0.08); color: #e2e8f0; align-self: flex-start; border-bottom-left-radius: 4px; }}
-    
+
     .stories-row {{ display: flex; gap: 12px; padding: 8px 0; overflow-x: auto; margin-bottom: 8px; }}
     .stories-row::-webkit-scrollbar {{ height: 0; }}
     .story-item {{ display: flex; flex-direction: column; align-items: center; gap: 3px; min-width: 62px; cursor: pointer; }}
@@ -713,42 +811,42 @@ def inject_styles():
     .story-ring-inner {{ width: 100%; height: 100%; border-radius: 50%; object-fit: cover; border: 2px solid {theme['bg']}; }}
     .story-ring-inner-placeholder {{ width: 100%; height: 100%; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; color: white; font-size: 1.1rem; border: 2px solid {theme['bg']}; }}
     .story-name {{ color: {theme['secondary']}; font-size: 0.6rem; max-width: 60px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }}
-    
+
     .user-row {{ display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 10px; cursor: pointer; }}
     .user-row:hover {{ background: rgba(255,255,255,0.04); }}
     .online-dot {{ width: 8px; height: 8px; border-radius: 50%; background: #10b981; box-shadow: 0 0 6px rgba(16,185,129,0.5); flex-shrink: 0; }}
     .unread-count {{ background: {theme['accent']}; color: white; border-radius: 10px; padding: 2px 8px; font-size: 0.65rem; font-weight: 600; }}
-    
+
     .modal-overlay {{ position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.8); backdrop-filter: blur(8px); display: flex; align-items: center; justify-content: center; z-index: 2000; }}
     .modal-box {{ background: {theme['bg']}fa; border: 1px solid rgba(255,255,255,0.1); border-radius: 20px; width: 92%; max-width: 500px; max-height: 80vh; overflow-y: auto; padding: 20px; }}
-    
+
     .theme-grid {{ display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; padding: 8px 0; }}
     .wallpaper-grid {{ display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; padding: 8px 0; }}
     .theme-card {{ border-radius: 12px; padding: 16px 6px; text-align: center; cursor: pointer; border: 2px solid transparent; }}
     .theme-card.selected {{ border-color: {theme['accent']}; box-shadow: 0 0 15px {theme['accent']}44; }}
     .wallpaper-card {{ border-radius: 10px; height: 60px; cursor: pointer; border: 2px solid transparent; background-size: cover; background-position: center; }}
     .wallpaper-card.selected {{ border-color: {theme['accent']}; box-shadow: 0 0 12px {theme['accent']}44; }}
-    
-    .stButton > button {{ background: {theme['accent']}22; border: 1px solid {theme['accent']}33; color: {theme['text']}; border-radius: 10px; padding: 8px 16px; font-size: 0.85rem; font-weight: 500; min-height: auto; }}
+
+    .stButton > button {{ background: {theme['accent']}22; border: 1px solid {theme['accent']}33; color: {theme['text']}; border-radius: 10px; padding: 8px 16px; font-size: 0.85rem; font-weight: 500; min-height: auto; cursor: pointer; }}
     .stButton > button:hover {{ background: {theme['accent']}33; }}
-    
+
     .stTextInput > div > div > input, .stTextArea > div > div > textarea {{
         background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.12);
         color: {theme['text']}; border-radius: 10px; padding: 10px 14px; font-size: 0.9rem;
     }}
     .stTextInput > div > div > input::placeholder, .stTextArea > div > div > textarea::placeholder {{ color: {theme['secondary']}; }}
-    
+
     .stTabs [data-baseweb="tab-list"] {{ gap: 4px; background: transparent; }}
     .stTabs [data-baseweb="tab"] {{ color: {theme['secondary']}; border-radius: 8px; padding: 6px 14px; font-size: 0.8rem; }}
     .stTabs [aria-selected="true"] {{ color: {theme['accent']}; background: {theme['accent']}15; }}
-    
+
     .stExpander {{ background: {theme['card']}; border: 1px solid rgba(255,255,255,0.06); border-radius: 12px; }}
     .streamlit-expanderHeader {{ color: {theme['text']}; font-size: 0.9rem; }}
-    
+
     ::-webkit-scrollbar {{ width: 4px; }}
     ::-webkit-scrollbar-track {{ background: transparent; }}
     ::-webkit-scrollbar-thumb {{ background: {theme['accent']}44; border-radius: 2px; }}
-    
+
     @media (max-width: 480px) {{
         .card {{ border-radius: 10px; margin-bottom: 8px; }}
         .bottom-nav {{ height: 56px; }}
@@ -766,7 +864,8 @@ def render_avatar(username: str, size: int = 36) -> str:
             with open(path, "rb") as f:
                 b64 = base64.b64encode(f.read()).decode()
             return f'<img src="data:image/jpeg;base64,{b64}" class="avatar" style="width:{size}px;height:{size}px;" alt="{username}">'
-        except: pass
+        except:
+            pass
     color = get_avatar_color(username)
     return f'<div class="avatar-placeholder" style="width:{size}px;height:{size}px;font-size:{size*0.38}px;background:{color};">{get_initials(username)}</div>'
 
@@ -785,7 +884,18 @@ def render_story_ring(username: str, size: int = 58, has_new: bool = False) -> s
 def render_header():
     user = st.session_state.user
     unread = DataManager.get_unread_count(user)
-    st.markdown(f'<div class="app-header"><div class="app-logo">SocialHub</div><div style="display:flex;align-items:center;gap:12px;color:{get_current_theme()["text"]};"><span style="position:relative;">🔔{f"<span class=\\"badge\\">{unread}</span>" if unread > 0 else ""}</span>{render_avatar(user, 30)}</div></div>', unsafe_allow_html=True)
+    theme = get_current_theme()
+    badge_html = f'<span class="badge">{unread}</span>' if unread > 0 else ''
+    header_html = f"""
+    <div class="app-header">
+        <div class="app-logo">SocialHub</div>
+        <div style="display:flex;align-items:center;gap:12px;color:{theme['text']};">
+            <span style="position:relative;">🔔{badge_html}</span>
+            {render_avatar(user, 30)}
+        </div>
+    </div>
+    """
+    st.markdown(header_html, unsafe_allow_html=True)
 
 def render_stories_bar():
     user = st.session_state.user
@@ -803,115 +913,256 @@ def render_stories_bar():
     st.markdown(html, unsafe_allow_html=True)
 
 def render_post_card(post: Dict):
-    username = post.get("username", ""); pid = post.get("id", "")
+    username = post.get("username", "")
+    pid = post.get("id", "")
     is_owner = username == st.session_state.user
-    is_liked = st.session_state.user in post.get("likes", []); likes = len(post.get("likes", []))
-    
-    st.markdown(f'<div class="card"><div class="card-header">{render_avatar(username)}<div style="flex:1;"><div class="username-text">@{html.escape(username)}</div><div class="timestamp">{format_timestamp(post.get("timestamp", ""))}</div></div></div>', unsafe_allow_html=True)
-    if post.get("text"): st.markdown(f'<div class="post-text">{html.escape(post["text"])}</div>', unsafe_allow_html=True)
-    if post.get("media") and post.get("media_type") == "image": st.markdown(f'<img src="{post["media"]}" class="post-media" alt="Post">', unsafe_allow_html=True)
-    
+    is_liked = st.session_state.user in post.get("likes", [])
+    likes = len(post.get("likes", []))
+
+    card_html = f"""
+    <div class="card">
+        <div class="card-header">
+            {render_avatar(username)}
+            <div style="flex:1;">
+                <div class="username-text">@{html.escape(username)}</div>
+                <div class="timestamp">{format_timestamp(post.get('timestamp', ''))}</div>
+            </div>
+        </div>
+    """
+    st.markdown(card_html, unsafe_allow_html=True)
+
+    if post.get("text"):
+        st.markdown(f'<div class="post-text">{html.escape(post["text"])}</div>', unsafe_allow_html=True)
+
+    if post.get("media") and post.get("media_type") == "image":
+        st.markdown(f'<img src="{post["media"]}" class="post-media" alt="Post">', unsafe_allow_html=True)
+
     st.markdown('<div class="post-actions">', unsafe_allow_html=True)
+
     c1, c2, c3, c4, c5 = st.columns([1, 1, 1, 1, 2])
     with c1:
-        if st.button(f"{'❤️' if is_liked else '🤍'} {likes}", key=f"lk_{pid}"): PostHandler.like(pid); st.rerun()
+        if st.button(f"{'❤️' if is_liked else '🤍'} {likes}", key=f"lk_{pid}"):
+            PostHandler.like(pid)
+            st.rerun()
     with c2:
-        if st.button("💬", key=f"cm_{pid}"): st.session_state.show_comments_for = None if st.session_state.show_comments_for == pid else pid; st.rerun()
+        if st.button("💬", key=f"cm_{pid}"):
+            st.session_state.show_comments_for = None if st.session_state.show_comments_for == pid else pid
+            st.rerun()
     with c3:
-        if st.button("🔄", key=f"rp_{pid}"): st.toast("Reposted!")
+        if st.button("🔄", key=f"rp_{pid}"):
+            st.toast("Reposted!")
     with c4:
-        if st.button("📤", key=f"sh_{pid}"): st.toast("Link copied!")
+        if st.button("📤", key=f"sh_{pid}"):
+            st.toast("Link copied!")
     if is_owner:
         with c5:
-            if st.button("🗑️", key=f"dl_{pid}"): PostHandler.delete(pid); st.rerun()
+            if st.button("🗑️", key=f"dl_{pid}"):
+                PostHandler.delete(pid)
+                st.rerun()
     st.markdown('</div>', unsafe_allow_html=True)
-    
-    if st.session_state.show_comments_for == pid: render_comments(pid)
+
+    if st.session_state.show_comments_for == pid:
+        render_comments(pid)
+
     st.markdown('</div>', unsafe_allow_html=True)
 
 def render_poll_card(post: Dict):
-    username = post.get("username", ""); pid = post.get("id", "")
-    pd = post.get("poll_data", {}); total = pd.get("total_votes", 0); options = pd.get("options", {})
-    
-    st.markdown(f'<div class="card"><div class="card-header">{render_avatar(username)}<div style="flex:1;"><div class="username-text">@{html.escape(username)}</div><div class="timestamp">Poll - {format_timestamp(post.get("timestamp", ""))}</div></div></div><div class="post-text" style="font-weight:600;">{html.escape(post.get("text", ""))}</div><div style="padding:0 12px 8px 12px;">', unsafe_allow_html=True)
-    
+    username = post.get("username", "")
+    pid = post.get("id", "")
+    pd = post.get("poll_data", {})
+    total = pd.get("total_votes", 0)
+    options = pd.get("options", {})
+    theme = get_current_theme()
+
+    card_html = f"""
+    <div class="card">
+        <div class="card-header">
+            {render_avatar(username)}
+            <div style="flex:1;">
+                <div class="username-text">@{html.escape(username)}</div>
+                <div class="timestamp">Poll - {format_timestamp(post.get('timestamp', ''))}</div>
+            </div>
+        </div>
+        <div class="post-text" style="font-weight:600;">{html.escape(post.get('text', ''))}</div>
+        <div style="padding:0 12px 8px 12px;">
+    """
+    st.markdown(card_html, unsafe_allow_html=True)
+
     for opt, voters in options.items():
         pct = (len(voters) / total * 100) if total > 0 else 0
         voted = st.session_state.user in voters
-        st.markdown(f'<div style="background:rgba(255,255,255,0.04);border-radius:8px;padding:6px 8px;margin:3px 0;cursor:pointer;{"border:1px solid " + get_current_theme()["accent"] + ";" if voted else ""}"><div style="display:flex;justify-content:space-between;color:#e2e8f0;font-size:0.82rem;"><span>{"✓ " if voted else ""}{html.escape(opt)}</span><span>{pct:.0f}%</span></div><div style="height:3px;background:rgba(255,255,255,0.06);border-radius:2px;margin-top:4px;"><div style="width:{pct}%;height:100%;background:linear-gradient(90deg,#667eea,#764ba2);border-radius:2px;"></div></div></div>', unsafe_allow_html=True)
-        if st.button(f"Vote {html.escape(opt[:15])}", key=f"pv_{pid}_{opt[:10]}"): PostHandler.vote_poll(pid, opt); st.rerun()
-    
+        border = f"border:1px solid {theme['accent']};" if voted else ""
+        opt_html = f"""
+        <div style="background:rgba(255,255,255,0.04);border-radius:8px;padding:6px 8px;margin:3px 0;cursor:pointer;{border}">
+            <div style="display:flex;justify-content:space-between;color:#e2e8f0;font-size:0.82rem;">
+                <span>{'✓ ' if voted else ''}{html.escape(opt)}</span>
+                <span>{pct:.0f}%</span>
+            </div>
+            <div style="height:3px;background:rgba(255,255,255,0.06);border-radius:2px;margin-top:4px;">
+                <div style="width:{pct}%;height:100%;background:linear-gradient(90deg,#667eea,#764ba2);border-radius:2px;"></div>
+            </div>
+        </div>
+        """
+        st.markdown(opt_html, unsafe_allow_html=True)
+        if st.button(f"Vote {html.escape(opt[:15])}", key=f"pv_{pid}_{opt[:10]}"):
+            PostHandler.vote_poll(pid, opt)
+            st.rerun()
+
     st.markdown(f'<div style="color:#64748b;font-size:0.65rem;margin-top:4px;">{total} votes</div></div></div>', unsafe_allow_html=True)
 
 def render_comments(post_id: str):
     comments = CommentHandler.get(post_id)
     st.markdown('<div style="padding:4px 12px;border-top:1px solid rgba(255,255,255,0.04);">', unsafe_allow_html=True)
     for c in comments[-15:]:
-        st.markdown(f'<div style="margin:4px 0;display:flex;gap:6px;align-items:flex-start;">{render_avatar(c["username"], 22)}<div><span style="color:#f1f5f9;font-weight:600;font-size:0.75rem;">@{html.escape(c["username"])}</span> <span style="color:#e2e8f0;font-size:0.78rem;">{html.escape(c["text"])}</span></div></div>', unsafe_allow_html=True)
+        comment_html = f"""
+        <div style="margin:4px 0;display:flex;gap:6px;align-items:flex-start;">
+            {render_avatar(c['username'], 22)}
+            <div>
+                <span style="color:#f1f5f9;font-weight:600;font-size:0.75rem;">@{html.escape(c['username'])}</span>
+                <span style="color:#e2e8f0;font-size:0.78rem;">{html.escape(c['text'])}</span>
+            </div>
+        </div>
+        """
+        st.markdown(comment_html, unsafe_allow_html=True)
     with st.form(f"cmf_{post_id}", clear_on_submit=True):
         c1, c2 = st.columns([5, 1])
-        with c1: txt = st.text_input("Comment", label_visibility="collapsed", placeholder="Write a comment...", key=f"ci_{post_id}")
+        with c1:
+            txt = st.text_input("Comment", placeholder="Write a comment...", key=f"ci_{post_id}")
         with c2:
             if st.form_submit_button("Post"):
-                if txt.strip(): CommentHandler.add(post_id, txt); st.rerun()
+                if txt.strip():
+                    CommentHandler.add(post_id, txt)
+                    st.rerun()
     st.markdown('</div>', unsafe_allow_html=True)
 
 def render_chat_interface():
     active_chat = st.session_state.get('active_chat')
     active_group = st.session_state.get('active_group')
     active_channel = st.session_state.get('active_channel')
-    
+
     if st.button("Back", use_container_width=True, key="back_btn"):
-        st.session_state.active_chat = None; st.session_state.active_group = None; st.session_state.active_channel = None; st.rerun()
-    
+        st.session_state.active_chat = None
+        st.session_state.active_group = None
+        st.session_state.active_channel = None
+        st.rerun()
+
     if active_chat:
         msgs = ChatHandler.get_messages(active_chat)
-        st.markdown(f'<div style="display:flex;align-items:center;gap:8px;padding:8px 0;margin-bottom:8px;border-bottom:1px solid rgba(255,255,255,0.05);">{render_avatar(active_chat, 36)}<div class="username-text">@{html.escape(active_chat)}</div></div>', unsafe_allow_html=True)
+        header_html = f"""
+        <div style="display:flex;align-items:center;gap:8px;padding:8px 0;margin-bottom:8px;border-bottom:1px solid rgba(255,255,255,0.05);">
+            {render_avatar(active_chat, 36)}
+            <div class="username-text">@{html.escape(active_chat)}</div>
+        </div>
+        """
+        st.markdown(header_html, unsafe_allow_html=True)
         for m in msgs:
-            sent = m.get("from") == st.session_state.user; cls = "sent" if sent else "received"
-            st.markdown(f'<div style="display:flex;flex-direction:column;align-items:{"flex-end" if sent else "flex-start"};padding:0 4px;"><div class="chat-bubble {cls}">{html.escape(m.get("text", ""))}<div style="font-size:0.6rem;opacity:0.7;text-align:right;margin-top:2px;">{format_timestamp(m["timestamp"])}</div></div></div>', unsafe_allow_html=True)
+            sent = m.get("from") == st.session_state.user
+            cls = "sent" if sent else "received"
+            align = "flex-end" if sent else "flex-start"
+            msg_html = f"""
+            <div style="display:flex;flex-direction:column;align-items:{align};padding:0 4px;">
+                <div class="chat-bubble {cls}">
+                    {html.escape(m.get('text', ''))}
+                    <div style="font-size:0.6rem;opacity:0.7;text-align:right;margin-top:2px;">{format_timestamp(m['timestamp'])}</div>
+                </div>
+            </div>
+            """
+            st.markdown(msg_html, unsafe_allow_html=True)
         with st.form(f"dmf_{active_chat}", clear_on_submit=True):
             c1, c2 = st.columns([5, 1])
-            with c1: txt = st.text_input("Message", label_visibility="collapsed", placeholder="Type a message...", key=f"dmt_{active_chat}")
+            with c1:
+                txt = st.text_input("Message", placeholder="Type a message...", key=f"dmt_{active_chat}")
             with c2:
                 if st.form_submit_button("Send"):
-                    if txt.strip(): ChatHandler.send(active_chat, txt); st.rerun()
-    
+                    if txt.strip():
+                        ChatHandler.send(active_chat, txt)
+                        st.rerun()
+
     elif active_group:
         msgs = GroupHandler.get_group_messages(active_group)
         g = DataManager.get_group_chats().get(active_group, {})
-        st.markdown(f'<div style="display:flex;align-items:center;gap:8px;padding:8px 0;margin-bottom:8px;border-bottom:1px solid rgba(255,255,255,0.05);"><div class="avatar-placeholder" style="width:36px;height:36px;background:#667eea;">G</div><div><div class="username-text">{html.escape(g.get("name", "Group"))}</div><div style="color:#64748b;font-size:0.65rem;">{len(g.get("members", []))} members</div></div></div>', unsafe_allow_html=True)
+        header_html = f"""
+        <div style="display:flex;align-items:center;gap:8px;padding:8px 0;margin-bottom:8px;border-bottom:1px solid rgba(255,255,255,0.05);">
+            <div class="avatar-placeholder" style="width:36px;height:36px;background:#667eea;">G</div>
+            <div>
+                <div class="username-text">{html.escape(g.get('name', 'Group'))}</div>
+                <div style="color:#64748b;font-size:0.65rem;">{len(g.get('members', []))} members</div>
+            </div>
+        </div>
+        """
+        st.markdown(header_html, unsafe_allow_html=True)
         for m in msgs:
-            sent = m.get("from") == st.session_state.user; cls = "sent" if sent else "received"
-            st.markdown(f'<div style="display:flex;flex-direction:column;align-items:{"flex-end" if sent else "flex-start"};padding:0 4px;"><div class="chat-bubble {cls}">{"" if sent else f"<div style=\\"color:#818cf8;font-size:0.65rem;\\">@{html.escape(m.get(\\"from\\",\\"\\"))}</div>"}{html.escape(m.get("text", ""))}<div style="font-size:0.6rem;opacity:0.7;text-align:right;margin-top:2px;">{format_timestamp(m["timestamp"])}</div></div></div>', unsafe_allow_html=True)
+            sent = m.get("from") == st.session_state.user
+            cls = "sent" if sent else "received"
+            align = "flex-end" if sent else "flex-start"
+            sender_html = "" if sent else f'<div style="color:#818cf8;font-size:0.65rem;">@{html.escape(m.get("from",""))}</div>'
+            msg_html = f"""
+            <div style="display:flex;flex-direction:column;align-items:{align};padding:0 4px;">
+                <div class="chat-bubble {cls}">
+                    {sender_html}
+                    {html.escape(m.get('text', ''))}
+                    <div style="font-size:0.6rem;opacity:0.7;text-align:right;margin-top:2px;">{format_timestamp(m['timestamp'])}</div>
+                </div>
+            </div>
+            """
+            st.markdown(msg_html, unsafe_allow_html=True)
         with st.form(f"grpf_{active_group}", clear_on_submit=True):
             c1, c2 = st.columns([5, 1])
-            with c1: txt = st.text_input("Message", label_visibility="collapsed", placeholder="Type a message...", key=f"grpt_{active_group}")
+            with c1:
+                txt = st.text_input("Message", placeholder="Type a message...", key=f"grpt_{active_group}")
             with c2:
                 if st.form_submit_button("Send"):
-                    if txt.strip(): GroupHandler.send_message(active_group, txt); st.rerun()
-    
+                    if txt.strip():
+                        GroupHandler.send_message(active_group, txt)
+                        st.rerun()
+
     elif active_channel:
         msgs = GroupHandler.get_channel_messages(active_channel)
         ch = DataManager.get_channels().get(active_channel, {})
         is_admin = st.session_state.user in ch.get("admins", [])
-        st.markdown(f'<div style="display:flex;align-items:center;gap:8px;padding:8px 0;margin-bottom:8px;border-bottom:1px solid rgba(255,255,255,0.05);"><div class="avatar-placeholder" style="width:36px;height:36px;background:#f093fb;">C</div><div><div class="username-text">{html.escape(ch.get("name", "Channel"))}</div><div style="color:#64748b;font-size:0.65rem;">{len(ch.get("subscribers", []))} subscribers</div></div></div>', unsafe_allow_html=True)
+        header_html = f"""
+        <div style="display:flex;align-items:center;gap:8px;padding:8px 0;margin-bottom:8px;border-bottom:1px solid rgba(255,255,255,0.05);">
+            <div class="avatar-placeholder" style="width:36px;height:36px;background:#f093fb;">C</div>
+            <div>
+                <div class="username-text">{html.escape(ch.get('name', 'Channel'))}</div>
+                <div style="color:#64748b;font-size:0.65rem;">{len(ch.get('subscribers', []))} subscribers</div>
+            </div>
+        </div>
+        """
+        st.markdown(header_html, unsafe_allow_html=True)
         for m in msgs:
-            st.markdown(f'<div class="card" style="margin:6px 0;padding:8px 10px;"><div style="display:flex;align-items:center;gap:6px;">{render_avatar(m.get("from", ""), 28)}<div><div class="username-text">@{html.escape(m.get("from", ""))}</div><div class="timestamp">{format_timestamp(m["timestamp"])}</div></div></div><div style="color:#e2e8f0;font-size:0.85rem;margin-top:4px;">{html.escape(m.get("text", ""))}</div></div>', unsafe_allow_html=True)
+            msg_html = f"""
+            <div class="card" style="margin:6px 0;padding:8px 10px;">
+                <div style="display:flex;align-items:center;gap:6px;">
+                    {render_avatar(m.get('from', ''), 28)}
+                    <div>
+                        <div class="username-text">@{html.escape(m.get('from', ''))}</div>
+                        <div class="timestamp">{format_timestamp(m['timestamp'])}</div>
+                    </div>
+                </div>
+                <div style="color:#e2e8f0;font-size:0.85rem;margin-top:4px;">{html.escape(m.get('text', ''))}</div>
+            </div>
+            """
+            st.markdown(msg_html, unsafe_allow_html=True)
         if is_admin:
             with st.form(f"chnf_{active_channel}", clear_on_submit=True):
                 c1, c2 = st.columns([5, 1])
-                with c1: txt = st.text_input("Broadcast", label_visibility="collapsed", placeholder="Post to channel...", key=f"chnt_{active_channel}")
+                with c1:
+                    txt = st.text_input("Broadcast", placeholder="Post to channel...", key=f"chnt_{active_channel}")
                 with c2:
                     if st.form_submit_button("Post"):
-                        if txt.strip(): GroupHandler.send_message(active_channel, txt, is_channel=True); st.rerun()
+                        if txt.strip():
+                            GroupHandler.send_message(active_channel, txt, is_channel=True)
+                            st.rerun()
 
 def render_create_modal():
-    if not st.session_state.get('show_create_modal'): return
-    st.markdown(f'<div class="modal-overlay"><div class="modal-box"><h3 style="color:{get_current_theme()["text"]};text-align:center;margin-bottom:12px;">Create</h3>', unsafe_allow_html=True)
-    
+    if not st.session_state.get('show_create_modal'):
+        return
+    theme = get_current_theme()
+    st.markdown(f'<div class="modal-overlay"><div class="modal-box"><h3 style="color:{theme["text"]};text-align:center;margin-bottom:12px;">Create</h3>', unsafe_allow_html=True)
+
     t1, t2, t3 = st.tabs(["Post", "Poll", "Story"])
-    
+
     with t1:
         with st.form("cpf", clear_on_submit=True):
             text = st.text_area("What's on your mind?", max_chars=MAX_POST_LENGTH, height=80, placeholder="Share your thoughts...")
@@ -922,11 +1173,18 @@ def render_create_modal():
                     md, mn = None, None
                     if media and media.size <= MAX_FILE_SIZE:
                         fb = media.read()
-                        if validate_image(fb): md = base64.b64encode(fb).decode(); mn = media.name
-                    if text.strip() or md: PostHandler.create(text, md, mn); st.session_state.show_create_modal = False; st.rerun()
+                        if validate_image(fb):
+                            md = base64.b64encode(fb).decode()
+                            mn = media.name
+                    if text.strip() or md:
+                        PostHandler.create(text, md, mn)
+                        st.session_state.show_create_modal = False
+                        st.rerun()
             with c2:
-                if st.form_submit_button("Cancel", use_container_width=True): st.session_state.show_create_modal = False; st.rerun()
-    
+                if st.form_submit_button("Cancel", use_container_width=True):
+                    st.session_state.show_create_modal = False
+                    st.rerun()
+
     with t2:
         with st.form("cplf", clear_on_submit=True):
             q = st.text_input("Poll question", max_chars=500, placeholder="What do you want to ask?")
@@ -936,10 +1194,15 @@ def render_create_modal():
                 if st.form_submit_button("Create Poll", use_container_width=True):
                     if q and opts:
                         olist = [o.strip() for o in opts.split('\n') if o.strip()]
-                        if len(olist) >= 2: PostHandler.create_poll(q, olist); st.session_state.show_create_modal = False; st.rerun()
+                        if len(olist) >= 2:
+                            PostHandler.create_poll(q, olist)
+                            st.session_state.show_create_modal = False
+                            st.rerun()
             with c2:
-                if st.form_submit_button("Cancel", use_container_width=True): st.session_state.show_create_modal = False; st.rerun()
-    
+                if st.form_submit_button("Cancel", use_container_width=True):
+                    st.session_state.show_create_modal = False
+                    st.rerun()
+
     with t3:
         with st.form("csf", clear_on_submit=True):
             sm = st.file_uploader("Story image", type=['png','jpg','jpeg','gif','webp'], key="sup")
@@ -948,11 +1211,18 @@ def render_create_modal():
                 if st.form_submit_button("Post Story", use_container_width=True):
                     if sm and sm.size <= MAX_FILE_SIZE:
                         fb = sm.read()
-                        if validate_image(fb): StoryHandler.create(base64.b64encode(fb).decode(), sm.name); st.session_state.show_create_modal = False; st.rerun()
+                        if validate_image(fb):
+                            StoryHandler.create(base64.b64encode(fb).decode(), sm.name)
+                            st.session_state.show_create_modal = False
+                            st.rerun()
             with c2:
-                if st.form_submit_button("Cancel", use_container_width=True): st.session_state.show_create_modal = False; st.rerun()
-    
-    if st.button("Close", use_container_width=True, key="close_modal"): st.session_state.show_create_modal = False; st.rerun()
+                if st.form_submit_button("Cancel", use_container_width=True):
+                    st.session_state.show_create_modal = False
+                    st.rerun()
+
+    if st.button("Close", use_container_width=True, key="close_modal"):
+        st.session_state.show_create_modal = False
+        st.rerun()
     st.markdown('</div></div>', unsafe_allow_html=True)
 
 def render_bottom_nav():
@@ -967,10 +1237,14 @@ def render_bottom_nav():
                 st.markdown(f'<div style="text-align:center;padding:4px;"><div style="font-size:1.3rem;color:{theme["accent"]};">{icon}</div><div style="font-size:0.55rem;color:{theme["accent"]};font-weight:600;">{label}</div></div>', unsafe_allow_html=True)
             else:
                 if st.button(icon, key=f"nav_{tab}", use_container_width=True, help=label):
-                    if tab == "create": st.session_state.show_create_modal = True
+                    if tab == "create":
+                        st.session_state.show_create_modal = True
                     else:
-                        st.session_state.current_tab = tab; st.session_state.show_create_modal = False
-                        st.session_state.active_chat = None; st.session_state.active_group = None; st.session_state.active_channel = None
+                        st.session_state.current_tab = tab
+                        st.session_state.show_create_modal = False
+                        st.session_state.active_chat = None
+                        st.session_state.active_group = None
+                        st.session_state.active_channel = None
                     st.rerun()
                 st.markdown(f'<div style="text-align:center;font-size:0.5rem;color:{theme["secondary"]};margin-top:-6px;">{label}</div>', unsafe_allow_html=True)
     st.markdown('</div>', unsafe_allow_html=True)
@@ -979,106 +1253,187 @@ def render_bottom_nav():
 def render_feed_page():
     st.markdown('<div class="content-wrapper">', unsafe_allow_html=True)
     render_stories_bar()
-    if st.button("What's on your mind? Tap to post...", use_container_width=True, key="qp"): st.session_state.show_create_modal = True; st.rerun()
+    if st.button("What's on your mind? Tap to post...", use_container_width=True, key="qp"):
+        st.session_state.show_create_modal = True
+        st.rerun()
     st.markdown("<br>", unsafe_allow_html=True)
     posts = st.session_state.feed_posts
     if not posts:
         st.markdown('<div style="text-align:center;padding:2rem;color:#64748b;"><div style="font-size:3rem;">Welcome!</div><p>No posts yet. Follow users or create your first post!</p></div>', unsafe_allow_html=True)
     else:
         for post in reversed(posts[-40:]):
-            if post.get("type") == "poll": render_poll_card(post)
-            else: render_post_card(post)
+            if post.get("type") == "poll":
+                render_poll_card(post)
+            else:
+                render_post_card(post)
     st.markdown('</div>', unsafe_allow_html=True)
 
 def render_explore_page():
     st.markdown('<div class="content-wrapper">', unsafe_allow_html=True)
-    st.markdown(f'<h3 style="color:{get_current_theme()["text"]};margin-bottom:8px;">Explore Users</h3>', unsafe_allow_html=True)
-    search = st.text_input("Search users", placeholder="Search by username...", label_visibility="collapsed", key="es")
+    theme = get_current_theme()
+    st.markdown(f'<h3 style="color:{theme["text"]};margin-bottom:8px;">Explore Users</h3>', unsafe_allow_html=True)
+    search = st.text_input("Search users", placeholder="Search by username...", key="es")
     users = list(DataManager.get_users().keys())
     filtered = [u for u in users if u != st.session_state.user and (not search or search.lower() in u.lower())]
     for u in filtered[:30]:
         is_following = FollowHandler.is_following(u)
         c1, c2, c3 = st.columns([4, 1, 1])
-        with c1: st.markdown(f'<div style="display:flex;align-items:center;gap:8px;padding:6px 0;">{render_avatar(u, 38)}<div class="username-text">@{html.escape(u)}</div></div>', unsafe_allow_html=True)
+        with c1:
+            st.markdown(f'<div style="display:flex;align-items:center;gap:8px;padding:6px 0;">{render_avatar(u, 38)}<div class="username-text">@{html.escape(u)}</div></div>', unsafe_allow_html=True)
         with c2:
-            if st.button("Following" if is_following else "Follow", key=f"ef_{u}", use_container_width=True): FollowHandler.follow(u); st.rerun()
+            if st.button("Following" if is_following else "Follow", key=f"ef_{u}", use_container_width=True):
+                FollowHandler.follow(u)
+                st.rerun()
         with c3:
-            if st.button("Chat", key=f"em_{u}", use_container_width=True): st.session_state.active_chat = u; st.session_state.current_tab = "chats"; st.rerun()
+            if st.button("Chat", key=f"em_{u}", use_container_width=True):
+                st.session_state.active_chat = u
+                st.session_state.current_tab = "chats"
+                st.rerun()
         st.markdown("<hr style='border-color:rgba(255,255,255,0.03);margin:0;'>", unsafe_allow_html=True)
     st.markdown('</div>', unsafe_allow_html=True)
 
 def render_chats_page():
     st.markdown('<div class="content-wrapper">', unsafe_allow_html=True)
     if st.session_state.get('active_chat') or st.session_state.get('active_group') or st.session_state.get('active_channel'):
-        render_chat_interface(); st.markdown('</div>', unsafe_allow_html=True); return
-    
-    st.markdown(f'<h3 style="color:{get_current_theme()["text"]};margin-bottom:8px;">Messages</h3>', unsafe_allow_html=True)
+        render_chat_interface()
+        st.markdown('</div>', unsafe_allow_html=True)
+        return
+
+    theme = get_current_theme()
+    st.markdown(f'<h3 style="color:{theme["text"]};margin-bottom:8px;">Messages</h3>', unsafe_allow_html=True)
     c1, c2, c3 = st.columns(3)
     with c1:
-        if st.button("New Chat", use_container_width=True, key="nc"): st.session_state.show_new_chat = True
+        if st.button("New Chat", use_container_width=True, key="nc"):
+            st.session_state.show_new_chat = True
     with c2:
-        if st.button("New Group", use_container_width=True, key="ng"): st.session_state.show_new_group = True
+        if st.button("New Group", use_container_width=True, key="ng"):
+            st.session_state.show_new_group = True
     with c3:
-        if st.button("New Channel", use_container_width=True, key="nch"): st.session_state.show_new_channel = True
-    
+        if st.button("New Channel", use_container_width=True, key="nch"):
+            st.session_state.show_new_channel = True
+
     t1, t2, t3 = st.tabs(["DMs", "Groups", "Channels"])
-    
+
     with t1:
         chats = ChatHandler.get_chat_list()
         if chats:
             for c in chats:
                 dot = '<span class="online-dot"></span>' if c['is_online'] else ''
                 unread = f'<span class="unread-count">{c["unread"]}</span>' if c['unread'] > 0 else ''
-                st.markdown(f'<div class="user-row" style="justify-content:space-between;"><div style="display:flex;align-items:center;gap:8px;flex:1;">{render_avatar(c["with_user"], 40)}<div style="flex:1;min-width:0;"><div style="display:flex;align-items:center;gap:4px;"><span class="username-text">@{html.escape(c["with_user"])}</span>{dot}</div><div style="color:#94a3b8;font-size:0.7rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{html.escape(c["last_message"])}</div></div></div><div style="text-align:right;flex-shrink:0;"><div class="timestamp">{format_timestamp(c["last_time"])}</div>{unread}</div></div>', unsafe_allow_html=True)
-                if st.button(f"Open", key=f"oc_{c['with_user']}", label_visibility="collapsed"): st.session_state.active_chat = c['with_user']; st.rerun()
+                chat_html = f"""
+                <div class="user-row" style="justify-content:space-between;">
+                    <div style="display:flex;align-items:center;gap:8px;flex:1;">
+                        {render_avatar(c['with_user'], 40)}
+                        <div style="flex:1;min-width:0;">
+                            <div style="display:flex;align-items:center;gap:4px;">
+                                <span class="username-text">@{html.escape(c['with_user'])}</span>{dot}
+                            </div>
+                            <div style="color:#94a3b8;font-size:0.7rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{html.escape(c['last_message'])}</div>
+                        </div>
+                    </div>
+                    <div style="text-align:right;flex-shrink:0;">
+                        <div class="timestamp">{format_timestamp(c['last_time'])}</div>{unread}
+                    </div>
+                </div>
+                """
+                st.markdown(chat_html, unsafe_allow_html=True)
+                if st.button("Open", key=f"oc_{c['with_user']}"):
+                    st.session_state.active_chat = c['with_user']
+                    st.rerun()
                 st.markdown("<hr style='border-color:rgba(255,255,255,0.02);margin:0;'>", unsafe_allow_html=True)
-        else: st.info("No conversations yet")
+        else:
+            st.info("No conversations yet")
         if st.session_state.get('show_new_chat'):
             with st.expander("New Chat", expanded=True):
                 avail = [u for u in list(DataManager.get_users().keys()) if u != st.session_state.user]
                 if avail:
                     sel = st.selectbox("User", avail, key="ncs")
-                    if st.button("Start", use_container_width=True): st.session_state.active_chat = sel; st.session_state.show_new_chat = False; st.rerun()
-    
+                    if st.button("Start", use_container_width=True):
+                        st.session_state.active_chat = sel
+                        st.session_state.show_new_chat = False
+                        st.rerun()
+
     with t2:
         groups = GroupHandler.get_user_groups()
         if groups:
             for g in groups:
-                st.markdown(f'<div class="user-row"><div class="avatar-placeholder" style="width:40px;height:40px;background:#667eea;">G</div><div><div class="username-text">{html.escape(g["name"])}</div><div style="color:#94a3b8;font-size:0.7rem;">{g["members"]} members</div></div></div>', unsafe_allow_html=True)
-                if st.button("Open", key=f"og_{g['id']}", label_visibility="collapsed"): st.session_state.active_group = g['id']; st.rerun()
-        else: st.info("No groups yet")
+                group_html = f"""
+                <div class="user-row">
+                    <div class="avatar-placeholder" style="width:40px;height:40px;background:#667eea;">G</div>
+                    <div>
+                        <div class="username-text">{html.escape(g['name'])}</div>
+                        <div style="color:#94a3b8;font-size:0.7rem;">{g['members']} members</div>
+                    </div>
+                </div>
+                """
+                st.markdown(group_html, unsafe_allow_html=True)
+                if st.button("Open", key=f"og_{g['id']}"):
+                    st.session_state.active_group = g['id']
+                    st.rerun()
+        else:
+            st.info("No groups yet")
         if st.session_state.get('show_new_group'):
             with st.expander("New Group", expanded=True):
                 gn = st.text_input("Name", max_chars=50, key="ngn", placeholder="Group name")
                 avail = [u for u in list(DataManager.get_users().keys()) if u != st.session_state.user]
                 mems = st.multiselect("Members", avail, key="ngm")
-                if st.button("Create", use_container_width=True) and gn: GroupHandler.create_group(gn, mems); st.session_state.show_new_group = False; st.rerun()
-    
+                if st.button("Create", use_container_width=True) and gn:
+                    GroupHandler.create_group(gn, mems)
+                    st.session_state.show_new_group = False
+                    st.rerun()
+
     with t3:
         channels = GroupHandler.get_user_channels()
         if channels:
             for ch in channels:
-                st.markdown(f'<div class="user-row"><div class="avatar-placeholder" style="width:40px;height:40px;background:#f093fb;">C</div><div><div class="username-text">{html.escape(ch["name"])}</div><div style="color:#94a3b8;font-size:0.7rem;">{ch["subscribers"]} subscribers</div></div></div>', unsafe_allow_html=True)
-                if st.button("Open", key=f"och_{ch['id']}", label_visibility="collapsed"): st.session_state.active_channel = ch['id']; st.rerun()
-        else: st.info("No channels yet")
+                ch_html = f"""
+                <div class="user-row">
+                    <div class="avatar-placeholder" style="width:40px;height:40px;background:#f093fb;">C</div>
+                    <div>
+                        <div class="username-text">{html.escape(ch['name'])}</div>
+                        <div style="color:#94a3b8;font-size:0.7rem;">{ch['subscribers']} subscribers</div>
+                    </div>
+                </div>
+                """
+                st.markdown(ch_html, unsafe_allow_html=True)
+                if st.button("Open", key=f"och_{ch['id']}"):
+                    st.session_state.active_channel = ch['id']
+                    st.rerun()
+        else:
+            st.info("No channels yet")
         if st.session_state.get('show_new_channel'):
             with st.expander("New Channel", expanded=True):
                 cn = st.text_input("Name", max_chars=50, key="nchn", placeholder="Channel name")
                 avail = [u for u in list(DataManager.get_users().keys()) if u != st.session_state.user]
                 subs = st.multiselect("Subscribers", avail, key="nchs")
-                if st.button("Create", use_container_width=True) and cn: GroupHandler.create_group(cn, subs or [], is_channel=True); st.session_state.show_new_channel = False; st.rerun()
-    
+                if st.button("Create", use_container_width=True) and cn:
+                    GroupHandler.create_group(cn, subs or [], is_channel=True)
+                    st.session_state.show_new_channel = False
+                    st.rerun()
+
     st.markdown('</div>', unsafe_allow_html=True)
 
 def render_profile_page():
     user = st.session_state.user
     profile = DataManager.get_profile(user)
     theme = get_current_theme()
-    
+
     st.markdown('<div class="content-wrapper">', unsafe_allow_html=True)
-    st.markdown(f'<div style="text-align:center;padding:16px 0;">{render_avatar(user, 72)}<h2 style="color:{theme["text"]};margin-top:8px;">@{html.escape(user)}</h2><p style="color:{theme["secondary"]};font-size:0.85rem;">{html.escape(profile.get("bio", "No bio yet"))}</p></div>', unsafe_allow_html=True)
-    st.markdown(f'<div style="display:flex;justify-content:space-around;text-align:center;padding:12px;border-top:1px solid rgba(255,255,255,0.05);border-bottom:1px solid rgba(255,255,255,0.05);margin-bottom:12px;"><div><div style="color:{theme["text"]};font-size:1.2rem;font-weight:700;">{profile.get("post_count", 0)}</div><div style="color:{theme["secondary"]};font-size:0.6rem;">Posts</div></div><div><div style="color:{theme["text"]};font-size:1.2rem;font-weight:700;">{len(profile.get("followers", []))}</div><div style="color:{theme["secondary"]};font-size:0.6rem;">Followers</div></div><div><div style="color:{theme["text"]};font-size:1.2rem;font-weight:700;">{len(profile.get("following", []))}</div><div style="color:{theme["secondary"]};font-size:0.6rem;">Following</div></div></div>', unsafe_allow_html=True)
-    
+
+    profile_html = f"""
+    <div style="text-align:center;padding:16px 0;">
+        {render_avatar(user, 72)}
+        <h2 style="color:{theme['text']};margin-top:8px;">@{html.escape(user)}</h2>
+        <p style="color:{theme['secondary']};font-size:0.85rem;">{html.escape(profile.get('bio', 'No bio yet'))}</p>
+    </div>
+    <div style="display:flex;justify-content:space-around;text-align:center;padding:12px;border-top:1px solid rgba(255,255,255,0.05);border-bottom:1px solid rgba(255,255,255,0.05);margin-bottom:12px;">
+        <div><div style="color:{theme['text']};font-size:1.2rem;font-weight:700;">{profile.get('post_count', 0)}</div><div style="color:{theme['secondary']};font-size:0.6rem;">Posts</div></div>
+        <div><div style="color:{theme['text']};font-size:1.2rem;font-weight:700;">{len(profile.get('followers', []))}</div><div style="color:{theme['secondary']};font-size:0.6rem;">Followers</div></div>
+        <div><div style="color:{theme['text']};font-size:1.2rem;font-weight:700;">{len(profile.get('following', []))}</div><div style="color:{theme['secondary']};font-size:0.6rem;">Following</div></div>
+    </div>
+    """
+    st.markdown(profile_html, unsafe_allow_html=True)
+
     with st.expander("Edit Profile"):
         with st.form("epf"):
             bio = st.text_area("Bio", value=profile.get("bio", ""), max_chars=MAX_BIO_LENGTH, placeholder="Tell people about yourself...")
@@ -1091,21 +1446,33 @@ def render_profile_page():
                     try:
                         img = Image.open(avatar_file)
                         if img.mode in ('RGBA','LA','P'):
-                            bg = Image.new('RGB', img.size, (255,255,255)); bg.paste(img.convert('RGBA'), mask=img.split()[-1] if img.mode == 'RGBA' else None); img = bg
-                        else: img = img.convert("RGB")
-                        img.thumbnail((200, 200)); path = UPLOADS_DIR / f"{user}_avatar.jpg"; img.save(path, "JPEG", quality=80); updates["avatar"] = str(path)
-                    except: st.error("Image error")
-                DataManager.update_profile(user, updates); st.success("Updated!"); st.rerun()
-    
+                            bg = Image.new('RGB', img.size, (255,255,255))
+                            bg.paste(img.convert('RGBA'), mask=img.split()[-1] if img.mode == 'RGBA' else None)
+                            img = bg
+                        else:
+                            img = img.convert("RGB")
+                        img.thumbnail((200, 200))
+                        path = UPLOADS_DIR / f"{user}_avatar.jpg"
+                        img.save(path, "JPEG", quality=80)
+                        updates["avatar"] = str(path)
+                    except:
+                        st.error("Image error")
+                DataManager.update_profile(user, updates)
+                st.success("Updated!")
+                st.rerun()
+
     with st.expander("Themes (20+)"):
         st.markdown('<div class="theme-grid">', unsafe_allow_html=True)
         current_theme = profile.get('theme', 'midnight')
         for tkey, tdata in THEMES.items():
             selected = "selected" if current_theme == tkey else ""
-            st.markdown(f'<div class="theme-card {selected}" style="background:{tdata["gradient"]};"><div style="font-size:1.5rem;">{tdata["icon"]}</div><div style="color:white;font-size:0.65rem;margin-top:4px;">{tdata["name"]}</div></div>', unsafe_allow_html=True)
-            if st.button("Apply", key=f"th_{tkey}", label_visibility="collapsed"): DataManager.update_profile(user, {"theme": tkey}); st.rerun()
+            theme_card = f'<div class="theme-card {selected}" style="background:{tdata["gradient"]};"><div style="font-size:1.5rem;">{tdata["icon"]}</div><div style="color:white;font-size:0.65rem;margin-top:4px;">{tdata["name"]}</div></div>'
+            st.markdown(theme_card, unsafe_allow_html=True)
+            if st.button("Apply", key=f"th_{tkey}"):
+                DataManager.update_profile(user, {"theme": tkey})
+                st.rerun()
         st.markdown('</div>', unsafe_allow_html=True)
-    
+
     with st.expander("Wallpapers (30)"):
         st.markdown('<div class="wallpaper-grid">', unsafe_allow_html=True)
         current_wp = profile.get('wallpaper', 'wp_gradient')
@@ -1114,19 +1481,26 @@ def render_profile_page():
             bg = wp_data.get("url", "")
             grad = wp_data.get("gradient", "")
             bg_style = f"background-image:url('{bg}');" if bg else f"background:{grad};"
-            st.markdown(f'<div class="wallpaper-card {selected}" style="{bg_style}" title="{wp_data["name"]}"></div>', unsafe_allow_html=True)
-            if st.button("Apply", key=f"wp_{wp_key}", label_visibility="collapsed"): DataManager.update_profile(user, {"wallpaper": wp_key}); st.rerun()
+            wp_card = f'<div class="wallpaper-card {selected}" style="{bg_style}" title="{wp_data["name"]}"></div>'
+            st.markdown(wp_card, unsafe_allow_html=True)
+            if st.button("Apply", key=f"wp_{wp_key}"):
+                DataManager.update_profile(user, {"wallpaper": wp_key})
+                st.rerun()
         st.markdown('</div>', unsafe_allow_html=True)
-    
+
     posts = [p for p in st.session_state.feed_posts if p.get("username") == user]
     if posts:
         st.markdown(f'<h4 style="color:{theme["text"]};margin-top:12px;">Your Posts</h4>', unsafe_allow_html=True)
         for post in reversed(posts[-20:]):
-            if post.get("type") == "poll": render_poll_card(post)
-            else: render_post_card(post)
-    
+            if post.get("type") == "poll":
+                render_poll_card(post)
+            else:
+                render_post_card(post)
+
     if st.button("Sign Out", use_container_width=True, key="so"):
-        for k in list(st.session_state.keys()): del st.session_state[k]; st.rerun()
+        for k in list(st.session_state.keys()):
+            del st.session_state[k]
+        st.rerun()
     st.markdown('</div>', unsafe_allow_html=True)
 
 # ========== AUTH ==========
@@ -1143,38 +1517,58 @@ def render_auth():
                 if st.form_submit_button("Sign In", use_container_width=True):
                     if u and p:
                         ok, res = DataManager.authenticate(u, p)
-                        if ok: st.session_state.auth = True; st.session_state.user = res; st.session_state.feed_posts = DataManager.get_feed_posts(); st.rerun()
-                        else: st.error(res)
+                        if ok:
+                            st.session_state.auth = True
+                            st.session_state.user = res
+                            st.session_state.feed_posts = DataManager.get_feed_posts()
+                            st.rerun()
+                        else:
+                            st.error(res)
         with t2:
             with st.form("su"):
                 u = st.text_input("Username", placeholder="3-20 chars", key="su_u")
                 p = st.text_input("Password", type="password", placeholder=f"Min {MIN_PASSWORD_LENGTH} chars", key="su_p")
                 cp = st.text_input("Confirm", type="password", placeholder="Re-enter", key="su_cp")
                 if st.form_submit_button("Create Account", use_container_width=True):
-                    if not u or not p: st.error("Fill all fields")
-                    elif p != cp: st.error("Passwords don't match")
-                    elif len(p) < MIN_PASSWORD_LENGTH: st.error("Password too short")
-                    elif len(u) < 3 or len(u) > MAX_USERNAME_LENGTH: st.error("Username 3-20 chars")
-                    elif not u.isalnum(): st.error("Letters/numbers only")
+                    if not u or not p:
+                        st.error("Fill all fields")
+                    elif p != cp:
+                        st.error("Passwords don't match")
+                    elif len(p) < MIN_PASSWORD_LENGTH:
+                        st.error("Password too short")
+                    elif len(u) < 3 or len(u) > MAX_USERNAME_LENGTH:
+                        st.error("Username 3-20 chars")
+                    elif not u.isalnum():
+                        st.error("Letters/numbers only")
                     else:
                         ok, msg = DataManager.create_user(u, p)
-                        if ok: st.success(msg); st.info("Sign in now!")
-                        else: st.error(msg)
+                        if ok:
+                            st.success(msg)
+                            st.info("Sign in now!")
+                        else:
+                            st.error(msg)
 
 # ========== MAIN ==========
 def main():
     init_session()
     inject_styles()
-    if not st.session_state.get('auth'): render_auth(); return
+    if not st.session_state.get('auth'):
+        render_auth()
+        return
     render_header()
     st.markdown('<div class="main-content">', unsafe_allow_html=True)
     tab = st.session_state.get('current_tab', 'feed')
-    if tab == "feed": render_feed_page()
-    elif tab == "explore": render_explore_page()
-    elif tab == "chats": render_chats_page()
-    elif tab == "profile": render_profile_page()
+    if tab == "feed":
+        render_feed_page()
+    elif tab == "explore":
+        render_explore_page()
+    elif tab == "chats":
+        render_chats_page()
+    elif tab == "profile":
+        render_profile_page()
     st.markdown('</div>', unsafe_allow_html=True)
-    if st.session_state.get('show_create_modal'): render_create_modal()
+    if st.session_state.get('show_create_modal'):
+        render_create_modal()
     render_bottom_nav()
 
 if __name__ == "__main__":
