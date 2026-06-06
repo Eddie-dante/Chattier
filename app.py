@@ -1014,6 +1014,359 @@ class DatabaseManager:
             except Exception as e:
                 logger.warning(f"Index creation warning: {e}")
 
+# ========== POST MANAGER ==========
+class PostManager:
+    """Manage posts and interactions"""
+    
+    def __init__(self, db: DatabaseManager):
+        self.db = db
+    
+    def create_post(self, user_id: int, text: str = "", media_file=None, 
+                   video_file=None, audio_file=None, location: str = "",
+                   price: float = 0.0, is_for_sale: bool = False) -> Tuple[bool, str]:
+        """Create a new post"""
+        try:
+            post_id = Utils.generate_id()
+            media_data = None
+            media_name = None
+            media_type = "image"
+            video_data = None
+            audio_data = None
+            
+            # Process image
+            if media_file:
+                if Utils.validate_image(media_file.getvalue()):
+                    optimized = Utils.optimize_image(media_file.getvalue())
+                    media_data = base64.b64encode(optimized).decode()
+                    media_name = media_file.name
+                    media_type = "image"
+            
+            # Process video
+            if video_file:
+                if Utils.validate_video(video_file.getvalue()):
+                    video_data = base64.b64encode(video_file.getvalue()).decode()
+                    media_type = "video"
+            
+            # Process audio
+            if audio_file:
+                if Utils.validate_audio(audio_file.getvalue()):
+                    audio_data = base64.b64encode(audio_file.getvalue()).decode()
+                    media_type = "audio"
+            
+            # Extract hashtags and mentions
+            hashtags = json.dumps(Utils.extract_hashtags(text))
+            mentions = json.dumps(Utils.extract_mentions(text))
+            
+            with self.db.get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute("""
+                    INSERT INTO posts (id, user_id, text, media_data, media_name, media_type,
+                                     video_data, audio_data, location, price, is_for_sale,
+                                     hashtags, mentions)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (post_id, user_id, text, media_data, media_name, media_type,
+                      video_data, audio_data, location, price, is_for_sale,
+                      hashtags, mentions))
+                
+                # Update user post count
+                cursor.execute("""
+                    UPDATE users SET total_posts = total_posts + 1 WHERE id = ?
+                """, (user_id,))
+                
+                # Update hashtags
+                for tag in json.loads(hashtags):
+                    cursor.execute("""
+                        INSERT INTO hashtags (tag, post_count, last_used)
+                        VALUES (?, 1, CURRENT_TIMESTAMP)
+                        ON CONFLICT(tag) DO UPDATE SET
+                        post_count = post_count + 1,
+                        last_used = CURRENT_TIMESTAMP
+                    """, (tag,))
+                    
+                    cursor.execute("""
+                        INSERT INTO post_hashtags (post_id, tag) VALUES (?, ?)
+                    """, (post_id, tag))
+                
+                conn.commit()
+                return True, post_id
+                
+        except Exception as e:
+            logger.error(f"Post creation error: {e}")
+            return False, str(e)
+    
+    def get_feed_posts(self, user_id: int, page: int = 1, limit: int = 20) -> List[Dict]:
+        """Get feed posts for user"""
+        try:
+            offset = (page - 1) * limit
+            with self.db.get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute("""
+                    SELECT p.*, u.username, u.is_verified, u.is_premium,
+                           pr.display_name, pr.avatar_path, pr.gender,
+                           (SELECT COUNT(*) FROM reactions WHERE post_id = p.id) as like_count,
+                           (SELECT COUNT(*) FROM comments WHERE post_id = p.id AND is_deleted = 0) as comment_count,
+                           (SELECT COUNT(*) FROM saved_posts WHERE post_id = p.id) as save_count
+                    FROM posts p
+                    JOIN users u ON p.user_id = u.id
+                    LEFT JOIN profiles pr ON u.id = pr.user_id
+                    WHERE p.is_deleted = 0 AND p.visibility = 'public'
+                    ORDER BY p.timestamp DESC
+                    LIMIT ? OFFSET ?
+                """, (limit, offset))
+                return [dict(row) for row in cursor.fetchall()]
+        except Exception as e:
+            logger.error(f"Feed error: {e}")
+            return []
+    
+    def get_post(self, post_id: str) -> Optional[Dict]:
+        """Get single post by ID"""
+        try:
+            with self.db.get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute("""
+                    SELECT p.*, u.username, u.is_verified, u.is_premium,
+                           pr.display_name, pr.avatar_path, pr.gender,
+                           (SELECT COUNT(*) FROM reactions WHERE post_id = p.id) as like_count,
+                           (SELECT COUNT(*) FROM comments WHERE post_id = p.id AND is_deleted = 0) as comment_count
+                    FROM posts p
+                    JOIN users u ON p.user_id = u.id
+                    LEFT JOIN profiles pr ON u.id = pr.user_id
+                    WHERE p.id = ? AND p.is_deleted = 0
+                """, (post_id,))
+                row = cursor.fetchone()
+                return dict(row) if row else None
+        except Exception as e:
+            logger.error(f"Get post error: {e}")
+            return None
+    
+    def like_post(self, post_id: str, user_id: int) -> Tuple[bool, str]:
+        """Like or unlike a post"""
+        try:
+            with self.db.get_connection() as conn:
+                cursor = conn.cursor()
+                
+                # Check if already liked
+                cursor.execute("""
+                    SELECT reaction_type FROM reactions WHERE post_id = ? AND user_id = ?
+                """, (post_id, user_id))
+                
+                existing = cursor.fetchone()
+                
+                if existing:
+                    # Unlike
+                    cursor.execute("""
+                        DELETE FROM reactions WHERE post_id = ? AND user_id = ?
+                    """, (post_id, user_id))
+                    conn.commit()
+                    return True, "unliked"
+                else:
+                    # Like
+                    cursor.execute("""
+                        INSERT INTO reactions (post_id, user_id, reaction_type)
+                        VALUES (?, ?, 'like')
+                    """, (post_id, user_id))
+                    
+                    # Get post owner
+                    cursor.execute("SELECT user_id FROM posts WHERE id = ?", (post_id,))
+                    post_owner = cursor.fetchone()
+                    
+                    if post_owner and post_owner['user_id'] != user_id:
+                        # Create notification
+                        notification_id = Utils.generate_id()
+                        cursor.execute("""
+                            INSERT INTO notifications (id, user_id, type, message, from_user_id, link)
+                            VALUES (?, ?, 'like', 'liked your post', ?, ?)
+                        """, (notification_id, post_owner['user_id'], user_id, f"/post/{post_id}"))
+                    
+                    conn.commit()
+                    return True, "liked"
+                    
+        except Exception as e:
+            logger.error(f"Like error: {e}")
+            return False, str(e)
+    
+    def add_comment(self, post_id: str, user_id: int, text: str, 
+                   parent_id: str = None) -> Tuple[bool, str]:
+        """Add a comment to a post"""
+        try:
+            comment_id = Utils.generate_id()
+            text = SecurityUtils.sanitize_input(text, Config.MAX_COMMENT_LENGTH)
+            
+            with self.db.get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute("""
+                    INSERT INTO comments (id, post_id, user_id, parent_id, text)
+                    VALUES (?, ?, ?, ?, ?)
+                """, (comment_id, post_id, user_id, parent_id, text))
+                
+                # Get post owner
+                cursor.execute("SELECT user_id FROM posts WHERE id = ?", (post_id,))
+                post_owner = cursor.fetchone()
+                
+                if post_owner and post_owner['user_id'] != user_id:
+                    notification_id = Utils.generate_id()
+                    cursor.execute("""
+                        INSERT INTO notifications (id, user_id, type, message, from_user_id, link)
+                        VALUES (?, ?, 'comment', 'commented on your post', ?, ?)
+                    """, (notification_id, post_owner['user_id'], user_id, f"/post/{post_id}"))
+                
+                conn.commit()
+                return True, comment_id
+                
+        except Exception as e:
+            logger.error(f"Comment error: {e}")
+            return False, str(e)
+    
+    def get_comments(self, post_id: str, limit: int = 50) -> List[Dict]:
+        """Get comments for a post"""
+        try:
+            with self.db.get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute("""
+                    SELECT c.*, u.username, u.is_verified, u.is_premium,
+                           pr.display_name, pr.avatar_path, pr.gender
+                    FROM comments c
+                    JOIN users u ON c.user_id = u.id
+                    LEFT JOIN profiles pr ON u.id = pr.user_id
+                    WHERE c.post_id = ? AND c.is_deleted = 0
+                    ORDER BY c.timestamp ASC
+                    LIMIT ?
+                """, (post_id, limit))
+                return [dict(row) for row in cursor.fetchall()]
+        except Exception as e:
+            logger.error(f"Get comments error: {e}")
+            return []
+
+# ========== CHAT MANAGER ==========
+class ChatManager:
+    """Manage private messages and group chats"""
+    
+    def __init__(self, db: DatabaseManager):
+        self.db = db
+    
+    def get_or_create_chat(self, user1_id: int, user2_id: int) -> str:
+        """Get or create a chat between two users"""
+        try:
+            chat_id = f"chat_{min(user1_id, user2_id)}_{max(user1_id, user2_id)}"
+            
+            with self.db.get_connection() as conn:
+                cursor = conn.cursor()
+                
+                # Check if chat exists
+                cursor.execute("""
+                    SELECT 1 FROM messages WHERE chat_id = ? LIMIT 1
+                """, (chat_id,))
+                
+                if not cursor.fetchone():
+                    # Create welcome message
+                    cursor.execute("""
+                        INSERT INTO messages (id, chat_id, from_id, to_id, text)
+                        VALUES (?, ?, ?, ?, 'Chat started')
+                    """, (Utils.generate_id(), chat_id, user1_id, user2_id))
+                    conn.commit()
+                
+                return chat_id
+        except Exception as e:
+            logger.error(f"Chat creation error: {e}")
+            return None
+    
+    def send_message(self, from_id: int, to_id: int, text: str, 
+                    media_file=None, sticker=None, gif=None) -> Tuple[bool, str]:
+        """Send a message"""
+        try:
+            message_id = Utils.generate_id()
+            chat_id = f"chat_{min(from_id, to_id)}_{max(from_id, to_id)}"
+            text = SecurityUtils.sanitize_input(text, Config.MAX_MESSAGE_LENGTH)
+            
+            media_data = None
+            if media_file:
+                if Utils.validate_image(media_file.getvalue()):
+                    optimized = Utils.optimize_image(media_file.getvalue())
+                    media_data = base64.b64encode(optimized).decode()
+            
+            with self.db.get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute("""
+                    INSERT INTO messages (id, chat_id, from_id, to_id, text, media_data, sticker_data, gif_data)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """, (message_id, chat_id, from_id, to_id, text, media_data, sticker, gif))
+                
+                conn.commit()
+                return True, message_id
+                
+        except Exception as e:
+            logger.error(f"Send message error: {e}")
+            return False, str(e)
+    
+    def get_conversations(self, user_id: int) -> List[Dict]:
+        """Get all conversations for a user"""
+        try:
+            with self.db.get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute("""
+                    SELECT DISTINCT 
+                        CASE 
+                            WHEN m.from_id = ? THEN m.to_id
+                            ELSE m.from_id
+                        END as other_user_id,
+                        u.username,
+                        u.is_verified,
+                        u.is_premium,
+                        pr.avatar_path,
+                        pr.display_name,
+                        (SELECT text FROM messages 
+                         WHERE chat_id = m.chat_id 
+                         ORDER BY timestamp DESC LIMIT 1) as last_message,
+                        (SELECT timestamp FROM messages 
+                         WHERE chat_id = m.chat_id 
+                         ORDER BY timestamp DESC LIMIT 1) as last_message_time,
+                        (SELECT COUNT(*) FROM messages 
+                         WHERE chat_id = m.chat_id AND to_id = ? AND is_read = 0) as unread_count
+                    FROM messages m
+                    JOIN users u ON (u.id = m.from_id OR u.id = m.to_id) AND u.id != ?
+                    LEFT JOIN profiles pr ON u.id = pr.user_id
+                    WHERE (m.from_id = ? OR m.to_id = ?)
+                    AND u.id IS NOT NULL
+                    ORDER BY last_message_time DESC
+                """, (user_id, user_id, user_id, user_id, user_id))
+                return [dict(row) for row in cursor.fetchall()]
+        except Exception as e:
+            logger.error(f"Get conversations error: {e}")
+            return []
+    
+    def get_messages(self, user1_id: int, user2_id: int, limit: int = 50) -> List[Dict]:
+        """Get messages between two users"""
+        try:
+            chat_id = f"chat_{min(user1_id, user2_id)}_{max(user1_id, user2_id)}"
+            
+            with self.db.get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute("""
+                    SELECT m.*, u.username, u.is_verified, pr.avatar_path
+                    FROM messages m
+                    JOIN users u ON m.from_id = u.id
+                    LEFT JOIN profiles pr ON u.id = pr.user_id
+                    WHERE m.chat_id = ? AND m.is_deleted = 0
+                    ORDER BY m.timestamp DESC
+                    LIMIT ?
+                """, (chat_id, limit))
+                
+                messages = [dict(row) for row in cursor.fetchall()]
+                messages.reverse()
+                
+                # Mark messages as read
+                cursor.execute("""
+                    UPDATE messages 
+                    SET is_read = 1 
+                    WHERE chat_id = ? AND to_id = ? AND is_read = 0
+                """, (chat_id, user1_id))
+                
+                conn.commit()
+                return messages
+        except Exception as e:
+            logger.error(f"Get messages error: {e}")
+            return []
+
 # ========== USER MANAGER ==========
 class UserManager:
     """Enhanced user management"""
@@ -1039,7 +1392,9 @@ class UserManager:
         # Validate password
         if len(password) < Config.MIN_PASSWORD_LENGTH:
             return False, f"Password must be at least {Config.MIN_PASSWORD_LENGTH} characters"
-        if not re.search(r'[A-Z]', password) or not re.search(r'[a-z]', password):
+        if not re.search(r'[A-Z]', password):
+            return False, "Password must contain both uppercase and lowercase letters"
+        if not re.search(r'[a-z]', password):
             return False, "Password must contain both uppercase and lowercase letters"
         if not re.search(r'[0-9]', password):
             return False, "Password must contain at least one number"
@@ -1448,6 +1803,37 @@ class UserManager:
             logger.error(f"Follow error: {e}")
             return False, "An error occurred"
     
+    def get_notifications(self, user_id: int, limit: int = 50) -> List[Dict]:
+        """Get user notifications"""
+        try:
+            with self.db.get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute("""
+                    SELECT n.*, u.username, u.is_verified, pr.avatar_path
+                    FROM notifications n
+                    LEFT JOIN users u ON n.from_user_id = u.id
+                    LEFT JOIN profiles pr ON u.id = pr.user_id
+                    WHERE n.user_id = ?
+                    ORDER BY n.timestamp DESC
+                    LIMIT ?
+                """, (user_id, limit))
+                return [dict(row) for row in cursor.fetchall()]
+        except Exception as e:
+            logger.error(f"Get notifications error: {e}")
+            return []
+    
+    def mark_notifications_read(self, user_id: int):
+        """Mark all notifications as read"""
+        try:
+            with self.db.get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute("""
+                    UPDATE notifications SET is_read = 1 WHERE user_id = ? AND is_read = 0
+                """, (user_id,))
+                conn.commit()
+        except Exception as e:
+            logger.error(f"Mark read error: {e}")
+    
     def _create_notification(self, cursor, user_id: int, ntype: str, 
                             message: str, from_user_id: int = None, 
                             link: str = "", metadata: Dict = None):
@@ -1473,9 +1859,6 @@ class UserManager:
         except Exception as e:
             logger.error(f"Notification creation error: {e}")
 
-# ========== MAIN APPLICATION ==========
-# [Previous managers remain the same - PostManager, ChatManager, etc.]
-
 # ========== STREAMLIT UI ==========
 class SocialiteUI:
     """Enhanced Streamlit UI with all features"""
@@ -1483,7 +1866,8 @@ class SocialiteUI:
     def __init__(self):
         self.db = DatabaseManager()
         self.user_manager = UserManager(self.db)
-        # ... initialize other managers
+        self.post_manager = PostManager(self.db)
+        self.chat_manager = ChatManager(self.db)
         self._init_session()
     
     def _init_session(self):
@@ -1549,7 +1933,7 @@ class SocialiteUI:
         if not user:
             return
         
-        unread = self._get_unread_count(user['user_id'])
+        unread = len(self.user_manager.get_notifications(user['user_id'], 1))
         badge = f'<span class="badge">{unread}</span>' if unread > 0 else ''
         
         st.markdown(f"""
@@ -1580,14 +1964,31 @@ class SocialiteUI:
         """, unsafe_allow_html=True)
         
         # Hidden navigation buttons
-        for tab in ['feed', 'explore', 'chats', 'marketplace', 'profile']:
-            if st.button(f"Nav {tab}", key=f"nav_btn_{tab}"):
-                st.session_state.current_tab = tab
+        col1, col2, col3, col4, col5, col6 = st.columns(6)
+        with col1:
+            if st.button("🏠", key="nav_btn_feed"):
+                st.session_state.current_tab = 'feed'
                 st.rerun()
-        
-        if st.button("Notifications", key="nav_btn_notifications"):
-            st.session_state.current_tab = 'notifications'
-            st.rerun()
+        with col2:
+            if st.button("🔍", key="nav_btn_explore"):
+                st.session_state.current_tab = 'explore'
+                st.rerun()
+        with col3:
+            if st.button("💬", key="nav_btn_chats"):
+                st.session_state.current_tab = 'chats'
+                st.rerun()
+        with col4:
+            if st.button("🛒", key="nav_btn_marketplace"):
+                st.session_state.current_tab = 'marketplace'
+                st.rerun()
+        with col5:
+            if st.button("👤", key="nav_btn_profile"):
+                st.session_state.current_tab = 'profile'
+                st.rerun()
+        with col6:
+            if st.button("🔔", key="nav_btn_notifications"):
+                st.session_state.current_tab = 'notifications'
+                st.rerun()
     
     def inject_styles(self):
         """Inject comprehensive styles"""
@@ -1813,7 +2214,7 @@ class SocialiteUI:
             white-space: pre-wrap !important;
         }}
         
-        /* INPUT FIELDS - FULLY VISIBLE */
+        /* INPUT FIELDS */
         .stTextInput > div > div > input,
         .stTextArea > div > div > textarea {{
             background: rgba(255, 255, 255, 0.1) !important;
@@ -1934,11 +2335,6 @@ class SocialiteUI:
             .nav-brand-text {{
                 font-size: 0.9rem !important;
             }}
-        }}
-        
-        /* HIDE RAW HTML OUTPUT */
-        .element-container:has(pre) {{
-            display: none !important;
         }}
         
         /* MODAL */
@@ -2113,29 +2509,11 @@ class SocialiteUI:
         
         st.markdown("<br>", unsafe_allow_html=True)
         
-        user = self.user_manager.get_user_by_username(st.session_state.username)
-        if not user:
-            return
-        
-        # Load posts (implementation continues with all features...)
-        posts = []
-        try:
-            # Get posts from database
-            with self.db.get_connection() as conn:
-                cursor = conn.cursor()
-                cursor.execute("""
-                    SELECT p.*, u.username, u.is_verified, u.is_premium,
-                           pr.display_name, pr.avatar_path, pr.gender
-                    FROM posts p
-                    JOIN users u ON p.user_id = u.id
-                    LEFT JOIN profiles pr ON u.id = pr.user_id
-                    WHERE p.is_deleted = 0 AND p.visibility = 'public'
-                    ORDER BY p.timestamp DESC
-                    LIMIT 50
-                """)
-                posts = [dict(row) for row in cursor.fetchall()]
-        except:
-            pass
+        # Load posts
+        posts = self.post_manager.get_feed_posts(
+            st.session_state.user_id, 
+            page=st.session_state.feed_page
+        )
         
         if not posts:
             st.markdown(f"""
@@ -2149,6 +2527,13 @@ class SocialiteUI:
         else:
             for post in posts:
                 self.render_post_card(post)
+            
+            # Pagination
+            col1, col2, col3 = st.columns([1, 2, 1])
+            with col2:
+                if st.button("Load More", use_container_width=True):
+                    st.session_state.feed_page += 1
+                    st.rerun()
         
         st.markdown('</div>', unsafe_allow_html=True)
     
@@ -2208,24 +2593,26 @@ class SocialiteUI:
                 except:
                     pass
             
-            # Price tag for marketplace posts
-            if post.get('is_for_sale') and post.get('price'):
-                st.markdown(f"""
-                <div style="padding:8px 16px;">
-                    <span style="background:rgba(255,215,0,0.2);color:#FFD700;
-                               padding:6px 12px;border-radius:20px;font-weight:700;">
-                        💰 ${post['price']:.2f}
-                    </span>
-                </div>
-                """, unsafe_allow_html=True)
+            # Stats row
+            like_count = post.get('like_count', 0)
+            comment_count = post.get('comment_count', 0)
+            
+            st.markdown(f"""
+            <div style="padding:8px 16px;color:#94a3b8;font-size:0.8rem;border-top:1px solid rgba(255,215,0,0.1);">
+                ❤️ {Utils.format_number(like_count)} likes · 💬 {Utils.format_number(comment_count)} comments
+            </div>
+            """, unsafe_allow_html=True)
             
             # Action buttons
-            col1, col2, col3, col4, col5, col6 = st.columns([2, 2, 2, 2, 2, 2])
+            col1, col2, col3, col4 = st.columns(4)
             
             with col1:
                 if st.button("❤️", key=f"like_{post['id']}", 
                            help="Like", use_container_width=True):
-                    st.toast("Liked! ❤️")
+                    success, result = self.post_manager.like_post(post['id'], st.session_state.user_id)
+                    if success:
+                        st.toast(f"Post {result}!")
+                        st.rerun()
             
             with col2:
                 if st.button("💬", key=f"comment_{post['id']}", 
@@ -2234,21 +2621,11 @@ class SocialiteUI:
                     st.rerun()
             
             with col3:
-                if st.button("🔄", key=f"share_{post['id']}", 
-                           help="Share", use_container_width=True):
-                    st.toast("Shared! 🔄")
-            
-            with col4:
                 if st.button("🔖", key=f"save_{post['id']}", 
                            help="Save", use_container_width=True):
                     st.toast("Saved! 🔖")
             
-            with col5:
-                if st.button("🎁", key=f"tip_{post['id']}", 
-                           help="Send Tip", use_container_width=True):
-                    st.toast("Tip sent! 🎁")
-            
-            with col6:
+            with col4:
                 if post['username'] == st.session_state.username:
                     if st.button("🗑️", key=f"delete_{post['id']}", 
                                help="Delete", use_container_width=True):
@@ -2273,7 +2650,7 @@ class SocialiteUI:
         
         # Add comment form
         with st.form(f"comment_form_{post_id}", clear_on_submit=True):
-            col1, col2, col3 = st.columns([4, 1, 1])
+            col1, col2 = st.columns([4, 1])
             with col1:
                 comment_text = st.text_input(
                     "Write a comment...",
@@ -2282,19 +2659,47 @@ class SocialiteUI:
                     placeholder="Write a comment..."
                 )
             with col2:
-                emoji_btn = st.form_submit_button("😀", use_container_width=True)
-            with col3:
                 submit_btn = st.form_submit_button("Post", use_container_width=True)
             
             if submit_btn and comment_text.strip():
-                st.toast("Comment posted!")
+                success, result = self.post_manager.add_comment(
+                    post_id, st.session_state.user_id, comment_text
+                )
+                if success:
+                    st.toast("Comment posted!")
+                    st.rerun()
+                else:
+                    st.error("Failed to post comment")
         
         # Show existing comments
-        st.markdown("""
-        <div style="margin-top:8px;color:#94a3b8;font-size:0.8rem;">
-            No comments yet. Be the first to comment!
-        </div>
-        """, unsafe_allow_html=True)
+        comments = self.post_manager.get_comments(post_id)
+        
+        if comments:
+            for comment in comments:
+                st.markdown(f"""
+                <div style="display:flex;gap:8px;margin-top:8px;padding:8px;">
+                    {self.render_avatar_html(comment, 28)}
+                    <div style="flex:1;">
+                        <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
+                            <span style="color:#FFD700;font-weight:600;font-size:0.8rem;">
+                                @{html.escape(comment['username'])}
+                            </span>
+                            <span style="color:#64748b;font-size:0.7rem;">
+                                {Utils.format_timestamp(comment['timestamp'])}
+                            </span>
+                        </div>
+                        <p style="color:#e2e8f0;font-size:0.85rem;margin:0;">
+                            {html.escape(comment['text'])}
+                        </p>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+        else:
+            st.markdown("""
+            <div style="margin-top:8px;color:#94a3b8;font-size:0.8rem;text-align:center;padding:16px;">
+                No comments yet. Be the first to comment!
+            </div>
+            """, unsafe_allow_html=True)
         
         st.markdown('</div>', unsafe_allow_html=True)
     
@@ -2306,126 +2711,73 @@ class SocialiteUI:
         <h3 style="color:#FFD700;text-align:center;margin-bottom:20px;">✨ Create Post</h3>
         """, unsafe_allow_html=True)
         
-        tab1, tab2, tab3 = st.tabs(["📝 Post", "📊 Poll", "📸 Story"])
-        
-        with tab1:
-            with st.form("create_post_form", clear_on_submit=True):
-                text = st.text_area(
-                    "What's on your mind?",
-                    max_chars=Config.MAX_POST_LENGTH,
-                    height=120,
-                    placeholder="Share your thoughts... Use #hashtags and @mentions!"
+        with st.form("create_post_form", clear_on_submit=True):
+            text = st.text_area(
+                "What's on your mind?",
+                max_chars=Config.MAX_POST_LENGTH,
+                height=120,
+                placeholder="Share your thoughts... Use #hashtags and @mentions!"
+            )
+            
+            # Media upload options
+            image_file = st.file_uploader(
+                "📷 Image",
+                type=['png', 'jpg', 'jpeg', 'gif', 'webp'],
+                key="post_image"
+            )
+            video_file = st.file_uploader(
+                "🎥 Video",
+                type=['mp4', 'webm', 'mov'],
+                key="post_video"
+            )
+            audio_file = st.file_uploader(
+                "🎵 Audio",
+                type=['mp3', 'wav', 'ogg'],
+                key="post_audio"
+            )
+            
+            col1, col2 = st.columns(2)
+            with col1:
+                location = st.text_input(
+                    "📍 Location",
+                    placeholder="Add location"
                 )
-                
-                # Media upload options
-                col1, col2, col3 = st.columns(3)
-                with col1:
-                    image_file = st.file_uploader(
-                        "📷 Image",
-                        type=['png', 'jpg', 'jpeg', 'gif', 'webp'],
-                        key="post_image"
-                    )
-                with col2:
-                    video_file = st.file_uploader(
-                        "🎥 Video",
-                        type=['mp4', 'webm', 'mov'],
-                        key="post_video"
-                    )
-                with col3:
-                    audio_file = st.file_uploader(
-                        "🎵 Audio",
-                        type=['mp3', 'wav', 'ogg'],
-                        key="post_audio"
-                    )
-                
-                col1, col2 = st.columns(2)
-                with col1:
-                    location = st.text_input(
-                        "📍 Location",
-                        placeholder="Add location"
-                    )
-                with col2:
-                    price = st.number_input(
-                        "💰 Price ($)",
-                        min_value=0.0,
-                        step=0.01,
-                        help="Set price to list in marketplace"
-                    )
-                
-                is_for_sale = st.checkbox("List in Marketplace")
-                
-                col1, col2 = st.columns(2)
-                with col1:
-                    if st.form_submit_button("📤 Post", use_container_width=True):
-                        if text or image_file or video_file or audio_file:
+            with col2:
+                price = st.number_input(
+                    "💰 Price ($)",
+                    min_value=0.0,
+                    step=0.01,
+                    help="Set price to list in marketplace"
+                )
+            
+            is_for_sale = st.checkbox("List in Marketplace")
+            
+            col1, col2 = st.columns(2)
+            with col1:
+                if st.form_submit_button("📤 Post", use_container_width=True):
+                    if text or image_file or video_file or audio_file:
+                        success, result = self.post_manager.create_post(
+                            st.session_state.user_id,
+                            text=text,
+                            media_file=image_file if image_file else None,
+                            video_file=video_file if video_file else None,
+                            audio_file=audio_file if audio_file else None,
+                            location=location,
+                            price=price,
+                            is_for_sale=is_for_sale
+                        )
+                        if success:
                             st.session_state.show_create_modal = False
                             st.toast("Post created successfully! ✨")
                             st.rerun()
                         else:
-                            st.error("Post cannot be empty")
-                with col2:
-                    if st.form_submit_button("❌ Cancel", use_container_width=True):
-                        st.session_state.show_create_modal = False
-                        st.rerun()
-        
-        with tab2:
-            with st.form("create_poll_form", clear_on_submit=True):
-                question = st.text_input(
-                    "Poll Question",
-                    max_chars=500,
-                    placeholder="What do you want to ask?"
-                )
-                options = st.text_area(
-                    "Options (one per line, max 10)",
-                    height=100,
-                    placeholder="Option 1\nOption 2\nOption 3"
-                )
-                duration = st.slider("Duration (hours)", 1, 168, 24)
-                
-                col1, col2 = st.columns(2)
-                with col1:
-                    if st.form_submit_button("📊 Create Poll", use_container_width=True):
-                        if question and options:
-                            st.session_state.show_create_modal = False
-                            st.toast("Poll created! 📊")
-                            st.rerun()
-                with col2:
-                    if st.form_submit_button("❌ Cancel", use_container_width=True):
-                        st.session_state.show_create_modal = False
-                        st.rerun()
-        
-        with tab3:
-            with st.form("create_story_form", clear_on_submit=True):
-                story_media = st.file_uploader(
-                    "Story Image/Video",
-                    type=['png', 'jpg', 'jpeg', 'mp4', 'webm'],
-                    key="story_media"
-                )
-                caption = st.text_input(
-                    "Caption",
-                    placeholder="Add caption..."
-                )
-                
-                # Emoji picker for stories
-                st.markdown("**Add Stickers/Emojis:**")
-                emoji_cols = st.columns(10)
-                emojis = ["❤️", "😂", "🔥", "✨", "💯", "🎉", "👑", "💎", "🌟", "🎨"]
-                for i, emoji in enumerate(emojis):
-                    with emoji_cols[i]:
-                        if st.button(emoji, key=f"story_emoji_{i}"):
-                            st.toast(f"Added {emoji}")
-                
-                col1, col2 = st.columns(2)
-                with col1:
-                    if st.form_submit_button("📸 Post Story", use_container_width=True):
-                        if story_media:
-                            st.session_state.show_create_modal = False
-                            st.toast("Story posted! 📸")
-                            st.rerun()
-                with col2:
-                    if st.form_submit_button("❌ Cancel", use_container_width=True):
-                        st.session_state.show_create_modal = False
-                        st.rerun()
+                            st.error(f"Failed to create post: {result}")
+                    else:
+                        st.error("Post cannot be empty")
+            with col2:
+                if st.form_submit_button("❌ Cancel", use_container_width=True):
+                    st.session_state.show_create_modal = False
+                    st.rerun()
         
         if st.button("✕ Close", use_container_width=True, key="close_modal"):
             st.session_state.show_create_modal = False
@@ -2467,7 +2819,11 @@ class SocialiteUI:
                     with col2:
                         if st.button("Follow", key=f"explore_follow_{user['username']}", 
                                    use_container_width=True):
-                            self.user_manager.follow_user(st.session_state.user_id, user['username'])
+                            success, msg = self.user_manager.follow_user(
+                                st.session_state.user_id, user['username']
+                            )
+                            st.toast(msg)
+                            time.sleep(0.5)
                             st.rerun()
                     with col3:
                         if st.button("💬", key=f"explore_chat_{user['username']}", 
@@ -2475,28 +2831,191 @@ class SocialiteUI:
                             st.session_state.active_chat = user['username']
                             st.session_state.current_tab = 'chats'
                             st.rerun()
+            else:
+                st.info("No users found")
+        else:
+            # Show suggested users
+            st.info("Search for users to connect with!")
         
         st.markdown('</div>', unsafe_allow_html=True)
     
     def render_chats(self):
-        """Render chats page placeholder"""
+        """Render chats page"""
         st.markdown('<div class="content-wrapper">', unsafe_allow_html=True)
         st.markdown('<h3 style="color:#FFD700;">💬 Messages</h3>', unsafe_allow_html=True)
-        st.info("Chat feature coming soon! Start by following users.")
+        
+        if st.session_state.active_chat:
+            # Show chat view
+            other_user = self.user_manager.get_user_by_username(st.session_state.active_chat)
+            if other_user:
+                st.markdown(f"""
+                <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;">
+                    {self.render_avatar_html(other_user, 40)}
+                    <h4 style="color:#FFD700;margin:0;">@{other_user['username']}</h4>
+                    <button onclick="document.getElementById('back_to_chats').click()" 
+                            style="margin-left:auto;">← Back</button>
+                </div>
+                """, unsafe_allow_html=True)
+                
+                if st.button("← Back", key="back_to_chats"):
+                    st.session_state.active_chat = None
+                    st.rerun()
+                
+                # Get messages
+                messages = self.chat_manager.get_messages(
+                    st.session_state.user_id,
+                    other_user['user_id']
+                )
+                
+                # Display messages
+                for msg in messages:
+                    is_me = msg['from_id'] == st.session_state.user_id
+                    align = "flex-end" if is_me else "flex-start"
+                    bg = "rgba(255,215,0,0.2)" if is_me else "rgba(255,255,255,0.05)"
+                    st.markdown(f"""
+                    <div style="display:flex;justify-content:{align};margin-bottom:8px;">
+                        <div style="max-width:70%;background:{bg};border-radius:12px;padding:8px 12px;">
+                            <p style="margin:0;color:#e2e8f0;font-size:0.85rem;">{html.escape(msg['text'])}</p>
+                            <p style="margin:4px 0 0 0;color:#64748b;font-size:0.7rem;text-align:right;">
+                                {Utils.format_timestamp(msg['timestamp'])}
+                            </p>
+                        </div>
+                    </div>
+                    """, unsafe_allow_html=True)
+                
+                # Message input
+                with st.form("send_message_form", clear_on_submit=True):
+                    col1, col2 = st.columns([4, 1])
+                    with col1:
+                        msg_text = st.text_input(
+                            "Type a message...",
+                            key="msg_input",
+                            label_visibility="collapsed"
+                        )
+                    with col2:
+                        if st.form_submit_button("Send", use_container_width=True):
+                            if msg_text.strip():
+                                self.chat_manager.send_message(
+                                    st.session_state.user_id,
+                                    other_user['user_id'],
+                                    msg_text
+                                )
+                                st.rerun()
+        else:
+            # Show conversation list
+            conversations = self.chat_manager.get_conversations(st.session_state.user_id)
+            
+            if not conversations:
+                st.info("No conversations yet. Start by following and messaging users!")
+            else:
+                for conv in conversations:
+                    with st.container():
+                        col1, col2 = st.columns([4, 1])
+                        with col1:
+                            st.markdown(f"""
+                            <div style="display:flex;align-items:center;gap:10px;padding:8px;">
+                                {self.render_avatar_html(conv, 40)}
+                                <div>
+                                    <div style="color:#f1f5f9;font-weight:600;">
+                                        @{html.escape(conv['username'])}
+                                        {'<span style="color:#FFD700;"> ✓</span>' if conv.get('is_verified') else ''}
+                                    </div>
+                                    <div style="color:#94a3b8;font-size:0.75rem;">
+                                        {html.escape(conv.get('last_message', 'No messages')[:50])}
+                                    </div>
+                                </div>
+                            </div>
+                            """, unsafe_allow_html=True)
+                        with col2:
+                            if st.button("💬", key=f"chat_{conv['username']}", 
+                                       use_container_width=True):
+                                st.session_state.active_chat = conv['username']
+                                st.rerun()
+        
         st.markdown('</div>', unsafe_allow_html=True)
     
     def render_marketplace(self):
-        """Render marketplace page placeholder"""
+        """Render marketplace page"""
         st.markdown('<div class="content-wrapper">', unsafe_allow_html=True)
         st.markdown('<h3 style="color:#FFD700;">🛒 Marketplace</h3>', unsafe_allow_html=True)
-        st.info("Marketplace feature coming soon! Create listings from posts.")
+        
+        # Get marketplace listings
+        try:
+            with self.db.get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute("""
+                    SELECT m.*, u.username, u.is_verified, pr.avatar_path
+                    FROM marketplace m
+                    JOIN users u ON m.seller_id = u.id
+                    LEFT JOIN profiles pr ON u.id = pr.user_id
+                    WHERE m.status = 'active' AND m.is_sold = 0
+                    ORDER BY m.created_at DESC
+                    LIMIT 20
+                """)
+                listings = [dict(row) for row in cursor.fetchall()]
+                
+                if not listings:
+                    st.info("No active listings found. Create a post with a price to list items!")
+                else:
+                    for listing in listings:
+                        with st.container():
+                            st.markdown(f"""
+                            <div style="background:rgba(255,255,255,0.04);border-radius:12px;padding:12px;margin-bottom:12px;">
+                                <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
+                                    {self.render_avatar_html(listing, 36)}
+                                    <div>
+                                        <div style="color:#f1f5f9;font-weight:600;">@{listing['username']}</div>
+                                        <div style="color:#94a3b8;font-size:0.7rem;">{Utils.format_timestamp(listing['created_at'])}</div>
+                                    </div>
+                                </div>
+                                <h4 style="color:#FFD700;margin:8px 0;">{html.escape(listing['title'])}</h4>
+                                <p style="color:#e2e8f0;font-size:0.85rem;">{html.escape(listing['description'][:200])}</p>
+                                <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px;">
+                                    <span style="background:rgba(255,215,0,0.2);color:#FFD700;padding:4px 12px;border-radius:20px;font-weight:700;">
+                                        💰 ${listing['price']:.2f}
+                                    </span>
+                                    <button style="background:linear-gradient(135deg,#FFD700,#FFA500);color:#1a0033;border:none;padding:6px 12px;border-radius:8px;cursor:pointer;">
+                                        Buy Now
+                                    </button>
+                                </div>
+                            </div>
+                            """, unsafe_allow_html=True)
+        except Exception as e:
+            st.info("Marketplace feature coming soon! Create listings from posts.")
+        
         st.markdown('</div>', unsafe_allow_html=True)
     
     def render_notifications(self):
-        """Render notifications page placeholder"""
-        st.markdown('<div class="content-wrapper">', unsafe_allow_html=True)
+        """Render notifications page"""
+        st.markdown('<div class="content-wrapper">', unsafe_allow_html.html)
         st.markdown('<h3 style="color:#FFD700;">🔔 Notifications</h3>', unsafe_allow_html=True)
-        st.info("No notifications yet. Start interacting with others!")
+        
+        # Mark all as read
+        self.user_manager.mark_notifications_read(st.session_state.user_id)
+        
+        # Get notifications
+        notifications = self.user_manager.get_notifications(st.session_state.user_id)
+        
+        if not notifications:
+            st.info("No notifications yet. Start interacting with others!")
+        else:
+            for notif in notifications:
+                with st.container():
+                    st.markdown(f"""
+                    <div style="background:rgba(255,255,255,0.04);border-radius:12px;padding:12px;margin-bottom:8px;">
+                        <div style="display:flex;align-items:center;gap:10px;">
+                            {self.render_avatar_html(notif, 36) if notif.get('from_user_id') else '<div style="width:36px;"></div>'}
+                            <div style="flex:1;">
+                                <p style="color:#e2e8f0;margin:0;">{html.escape(notif['message'])}</p>
+                                <p style="color:#64748b;font-size:0.7rem;margin:4px 0 0 0;">
+                                    {Utils.format_timestamp(notif['timestamp'])}
+                                </p>
+                            </div>
+                            {'<span style="color:#FFD700;">●</span>' if not notif['is_read'] else ''}
+                        </div>
+                    </div>
+                    """, unsafe_allow_html=True)
+        
         st.markdown('</div>', unsafe_allow_html=True)
     
     def render_profile(self):
@@ -2534,9 +3053,11 @@ class SocialiteUI:
         with col1:
             st.metric("Posts", user.get('total_posts', 0))
         with col2:
-            st.metric("Followers", self._get_follower_count(user['user_id']))
+            follower_count = self._get_follower_count(user['user_id'])
+            st.metric("Followers", follower_count)
         with col3:
-            st.metric("Following", self._get_following_count(user['user_id']))
+            following_count = self._get_following_count(user['user_id'])
+            st.metric("Following", following_count)
         
         # Edit Profile
         with st.expander("✏️ Edit Profile", expanded=False):
@@ -2570,7 +3091,7 @@ class SocialiteUI:
                 gender = st.selectbox(
                     "Gender",
                     ['prefer_not_to_say', 'male', 'female', 'non_binary'],
-                    index=0
+                    index=['prefer_not_to_say', 'male', 'female', 'non_binary'].index(user.get('gender', 'prefer_not_to_say'))
                 )
                 
                 avatar = st.file_uploader(
@@ -2622,27 +3143,6 @@ class SocialiteUI:
                     if st.button(tn, key=f"theme_{tk}", use_container_width=True):
                         self.user_manager.update_profile(user['user_id'], {'theme': tk})
                         st.rerun()
-        
-        # Wallpapers
-        with st.expander("🖼️ Wallpapers", expanded=False):
-            current_wp = user.get('wallpaper', '🌈 Gradient')
-            wallpapers = {
-                "🌈 Gradient": "gradient",
-                "✨ Purple": "https://images.unsplash.com/photo-1557682250-33bd709cbe85?w=800&q=60",
-                "🌌 Galaxy": "https://images.unsplash.com/photo-1534796636912-3b95b3ab5986?w=800&q=60",
-                "🌊 Ocean": "https://images.unsplash.com/photo-1505118380757-91f5f5632de0?w=800&q=60",
-                "🏔️ Mountains": "https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=800&q=60",
-                "🌸 Cherry": "https://images.unsplash.com/photo-1522383225653-ed111181a951?w=800&q=60"
-            }
-            selected_wp = st.selectbox(
-                "Choose Wallpaper",
-                list(wallpapers.keys()),
-                index=list(wallpapers.keys()).index(current_wp) if current_wp in wallpapers else 0,
-                key="wp_selector"
-            )
-            if st.button("Apply Wallpaper", use_container_width=True):
-                self.user_manager.update_profile(user['user_id'], {'wallpaper': selected_wp})
-                st.rerun()
         
         # Sign Out
         if st.button("🚪 Sign Out", use_container_width=True):
@@ -2751,19 +3251,6 @@ class SocialiteUI:
                 return cursor.fetchone()['count']
         except:
             return 0
-    
-    def _get_unread_count(self, user_id: int) -> int:
-        """Get unread notifications count"""
-        try:
-            with self.db.get_connection() as conn:
-                cursor = conn.cursor()
-                cursor.execute("""
-                    SELECT COUNT(*) as count FROM notifications 
-                    WHERE user_id = ? AND is_read = 0
-                """, (user_id,))
-                return cursor.fetchone()['count']
-        except:
-            return 0
 
 # ========== MAIN APPLICATION ENTRY POINT ==========
 def main():
@@ -2776,7 +3263,8 @@ def main():
         try:
             timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
             backup_path = Config.BACKUP_DIR / f"socialite_backup_{timestamp}.db"
-            shutil.copy2(Config.DB_PATH, backup_path)
+            if Config.DB_PATH.exists():
+                shutil.copy2(Config.DB_PATH, backup_path)
             
             # Keep only last 10 backups
             backups = sorted(Config.BACKUP_DIR.glob("socialite_backup_*.db"))
